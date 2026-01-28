@@ -133,7 +133,7 @@ Lake uses automated CI/CD via GitHub Actions and ArgoCD.
 
 Pushes to staging branches automatically build and deploy:
 - Build web assets and upload to S3
-- Build Docker image and push to `ghcr.io/malbeclabs/doublezero-lake`
+- Build Docker image and push to `ghcr.io/malbeclabs/lake`
 - Tag image as `staging` (ArgoCD picks up changes automatically)
 
 Current staging branches are configured in `.github/workflows/release.docker.lake.yml`.

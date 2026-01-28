@@ -134,6 +134,7 @@ jobs:
             ${{ env.IMAGE }}:${{ steps.v.outputs.branch_name }}
             ${{ env.IMAGE }}:sha-${{ steps.v.outputs.short_sha }}
             ${{ steps.v.outputs.is_staging == 'true' && format('{0}:staging', env.IMAGE) || '' }}
+            ${{ github.event_name == 'pull_request' && format('{0}:pr-{1}', env.IMAGE, github.event.pull_request.number) || '' }}
           labels: |
             org.opencontainers.image.source=${{ github.server_url }}/${{ github.repository }}
             org.opencontainers.image.revision=${{ github.sha }}
