@@ -258,6 +258,7 @@ function LinkInterfaceChart({ hours, bucketMinutes, controlsWidth = 'w-32' }: Li
     }
   })
 
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const CustomTooltip = ({ active, payload }: any) => {
     if (!active || !payload || payload.length === 0) return null
     const data = payload[0]?.payload
@@ -444,6 +445,7 @@ function LinkPacketLossChart({ hours, bucketMinutes, controlsWidth = 'w-32' }: L
     Z: h.side_z_loss_pct ?? 0,
   }))
 
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const CustomTooltip = ({ active, payload }: any) => {
     if (!active || !payload || payload.length === 0) return null
     const data = payload[0]?.payload
@@ -685,6 +687,7 @@ export function LinkStatusTimelines({
       if (health) {
         // Map no_data to unhealthy for filter matching (no_data is a status, not a filter option)
         const filterHealth = health === 'no_data' ? 'unhealthy' : health
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
         return healthFilters.includes(filterHealth as any)
       }
       // Link not in filter data - check if it exists in history
@@ -757,6 +760,7 @@ export function LinkStatusTimelines({
       // Higher index = more recent = should come first
       return bIndex - aIndex
     })
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [data?.links, issueFilters, healthFilters, noIssuesSelected, issueTypesSelected, linksWithIssues, linksWithHealth])
 
   if (isLoading) {

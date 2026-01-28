@@ -1,3 +1,4 @@
+/* eslint-disable react-refresh/only-export-components */
 import { createContext, useContext, useState, useCallback, type ReactNode } from 'react'
 import { useSearchParams } from 'react-router-dom'
 
@@ -245,6 +246,7 @@ export function TopologyProvider({ children, view }: TopologyProviderProps) {
       // When returning to explore, close panel if showing mode content
       setPanel(prev => prev.content === 'mode' ? { ...prev, isOpen: false } : prev)
     }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [setSearchParams, mode])
 
   // Panel controls
@@ -317,6 +319,7 @@ export function TopologyProvider({ children, view }: TopologyProviderProps) {
       })
       return newState
     })
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [setSearchParams, mode])
 
   // Impact device multi-select controls

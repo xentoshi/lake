@@ -70,11 +70,14 @@ export function ResultsView({
   }, [results, recommendedConfig, columnAnalysis])
 
   // Reset to table view when results change (new query)
+  const resultsColumnsKey = results?.columns.join(',')
+  const resultsRowCount = results?.row_count
   useEffect(() => {
     if (results) {
       setViewMode('table')
     }
-  }, [results?.columns.join(','), results?.row_count]) // Only trigger on actual new results
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [resultsColumnsKey, resultsRowCount]) // Only trigger on actual new results
 
   // Reset to table view when results are null
   useEffect(() => {

@@ -248,7 +248,7 @@ function calculateCurvedPath(
   end: [number, number],
   curveOffset: number = 0.15
 ): [number, number][] {
-  let startLng = start[0]
+  const startLng = start[0]
   let endLng = end[0]
   const lngDelta = endLng - startLng
   if (Math.abs(lngDelta) > 180) {
@@ -1175,6 +1175,7 @@ export function TopologyMap({ metros, devices, links, validators }: TopologyMapP
     }
 
     prevMapModeRef.current = mode
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [mode, whatifAdditionMode, pathModeEnabled, impactMode, selectedItem])
 
   // Fetch link removal simulation when link is selected
@@ -1808,6 +1809,7 @@ export function TopologyMap({ metros, devices, links, validators }: TopologyMapP
       type: 'FeatureCollection' as const,
       features,
     }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [links, devicePositions, isDark, hoveredLink, selectedItem, hoverHighlight, linkPathMap, selectedPathIndex, criticalityOverlayEnabled, linkCriticalityMap, whatifRemovalMode, removalLink, linkHealthMode, linkSlaStatus, trafficFlowMode, getTrafficColor, metroClusteringMode, collapsedMetros, deviceMap, metroMap, contributorLinksMode, contributorIndexMap, bandwidthMode, isisHealthMode, edgeHealthStatus, linkTypeMode, metroPathModeEnabled, metroLinkPathMap, metroPathSelectedPairs, multicastTreesMode, multicastLinkPathMap, multicastPublisherColorMap])
 
   // GeoJSON for validator links (connecting lines)
@@ -1972,7 +1974,7 @@ export function TopologyMap({ metros, devices, links, validators }: TopologyMapP
       const targetMetro = targetDevice ? metroMap.get(targetDevice.metro_pk) : undefined
       if (sourceMetro && targetMetro && mapRef.current) {
         // Two devices - fly to midpoint
-        let aLng = sourceMetro.longitude
+        const aLng = sourceMetro.longitude
         let zLng = targetMetro.longitude
         const lngDelta = zLng - aLng
         if (Math.abs(lngDelta) > 180) {
@@ -2007,7 +2009,7 @@ export function TopologyMap({ metros, devices, links, validators }: TopologyMapP
         const metroA = deviceA ? metroMap.get(deviceA.metro_pk) : undefined
         const metroZ = deviceZ ? metroMap.get(deviceZ.metro_pk) : undefined
         if (metroA && metroZ && mapRef.current) {
-          let aLng = metroA.longitude
+          const aLng = metroA.longitude
           let zLng = metroZ.longitude
           const lngDelta = zLng - aLng
           if (Math.abs(lngDelta) > 180) {
@@ -2052,7 +2054,7 @@ export function TopologyMap({ metros, devices, links, validators }: TopologyMapP
       const targetMetro = targetDevice ? metroMap.get(targetDevice.metro_pk) : undefined
       if (sourceMetro && targetMetro && mapRef.current) {
         // Two devices - fly to midpoint
-        let aLng = sourceMetro.longitude
+        const aLng = sourceMetro.longitude
         let zLng = targetMetro.longitude
         const lngDelta = zLng - aLng
         if (Math.abs(lngDelta) > 180) {
@@ -2303,7 +2305,7 @@ export function TopologyMap({ metros, devices, links, validators }: TopologyMapP
             if (linkFitsInView(metroA.longitude, metroA.latitude, metroZ.longitude, metroZ.latitude)) {
               itemFound = true
             } else {
-            let aLng = metroA.longitude
+            const aLng = metroA.longitude
             let zLng = metroZ.longitude
             const lngDelta = zLng - aLng
             if (Math.abs(lngDelta) > 180) {
@@ -2354,6 +2356,7 @@ export function TopologyMap({ metros, devices, links, validators }: TopologyMapP
     if (itemFound) {
       lastProcessedParamsRef.current = paramsKey
     }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [searchParams, mapReady, validatorMap, deviceMap, linkMap, metroMap, devicesByMetro, showValidators, toggleOverlay, mode, openPanel, impactMode, pathModeEnabled, whatifAdditionMode, whatifRemovalMode, pathSource, pathTarget, additionSource, additionTarget])
 
   // Handle link layer hover
@@ -3062,6 +3065,7 @@ export function TopologyMap({ metros, devices, links, validators }: TopologyMapP
             ) : undefined
           }
         >
+          {/* eslint-disable @typescript-eslint/no-explicit-any */}
           {selectedItem.type === 'device' && (
             <DeviceDetails device={selectedItem.data as any} />
           )}
@@ -3074,6 +3078,7 @@ export function TopologyMap({ metros, devices, links, validators }: TopologyMapP
           {selectedItem.type === 'validator' && (
             <ValidatorDetails validator={selectedItem.data as any} />
           )}
+          {/* eslint-enable @typescript-eslint/no-explicit-any */}
         </TopologyPanel>
       )}
 

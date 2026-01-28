@@ -186,7 +186,7 @@ export function InlineFilter({
           setSelectedIndex(prev => Math.max(prev - 1, -1))
         }
         break
-      case 'Enter':
+      case 'Enter': {
         e.preventDefault()
         const indexToUse = selectedIndex >= 0 ? selectedIndex : 0
         if (indexToUse < items.length) {
@@ -202,6 +202,7 @@ export function InlineFilter({
           commitFilter(query.trim())
         }
         break
+      }
       case 'Tab':
         if (selectedIndex >= 0 && selectedIndex < items.length) {
           const item = items[selectedIndex]

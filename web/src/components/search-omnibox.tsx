@@ -1,4 +1,4 @@
-import { useState, useRef, useEffect, useCallback } from 'react'
+import { useState, useRef, useEffect, useCallback, useMemo } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { Search, X, Clock, Server, Link2, MapPin, Building2, Users, Landmark, Radio, Loader2 } from 'lucide-react'
 import { cn, handleRowClick } from '@/lib/utils'
@@ -69,29 +69,33 @@ export function SearchOmnibox({ className, placeholder = 'Search...', onClose, i
 
   // Determine what to show in dropdown
   const showRecentSearches = query.length === 0 && recentSearches.length > 0
-  const suggestions = data?.suggestions || []
+  const suggestions = useMemo(() => data?.suggestions || [], [data?.suggestions])
 
   // Check if query matches any field prefix (e.g., "lin" matches "link:")
-  const matchingPrefixes = query.length > 0 && !query.includes(':')
+  const matchingPrefixes = useMemo(() => query.length > 0 && !query.includes(':')
     ? fieldPrefixes.filter(p => p.prefix.toLowerCase().startsWith(query.toLowerCase()))
-    : []
+    : [], [query])
   const showPrefixSuggestions = matchingPrefixes.length > 0
 
   // Build items list for keyboard navigation
-  const items: (SearchSuggestion | { type: 'prefix'; prefix: string; description: string } | { type: 'recent'; item: SearchSuggestion })[] = []
+  const items = useMemo(() => {
+    const result: (SearchSuggestion | { type: 'prefix'; prefix: string; description: string } | { type: 'recent'; item: SearchSuggestion })[] = []
 
-  if (showPrefixSuggestions) {
-    items.push(...matchingPrefixes.map(p => ({ type: 'prefix' as const, prefix: p.prefix, description: p.description })))
-  }
+    if (showPrefixSuggestions) {
+      result.push(...matchingPrefixes.map(p => ({ type: 'prefix' as const, prefix: p.prefix, description: p.description })))
+    }
 
-  if (showRecentSearches) {
-    items.push(...recentSearches.map(item => ({ type: 'recent' as const, item })))
-  }
+    if (showRecentSearches) {
+      result.push(...recentSearches.map(item => ({ type: 'recent' as const, item })))
+    }
 
-  // Add search results (show alongside prefix suggestions)
-  if (!showRecentSearches) {
-    items.push(...suggestions)
-  }
+    // Add search results (show alongside prefix suggestions)
+    if (!showRecentSearches) {
+      result.push(...suggestions)
+    }
+
+    return result
+  }, [showPrefixSuggestions, matchingPrefixes, showRecentSearches, recentSearches, suggestions])
 
   // Reset selection when items change
   useEffect(() => {

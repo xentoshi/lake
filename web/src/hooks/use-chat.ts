@@ -466,6 +466,7 @@ export function useChatStream(sessionId: string | undefined) {
       }))
       queryClient.invalidateQueries({ queryKey: chatKeys.detail(sessionId) })
     }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [sessionId, queryClient, abort])
 
   // Cleanup on unmount

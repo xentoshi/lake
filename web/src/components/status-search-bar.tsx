@@ -1,3 +1,4 @@
+/* eslint-disable react-refresh/only-export-components */
 import { useCallback } from 'react'
 import { useSearchParams } from 'react-router-dom'
 import { Search, X, Server, Link2, MapPin, Building2 } from 'lucide-react'

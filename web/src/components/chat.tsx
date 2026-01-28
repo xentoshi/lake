@@ -640,6 +640,7 @@ export function Chat({ messages, isPending, processingSteps, onSendMessage, onAb
   }, [])
 
   // Randomly select example questions (changes on mount or when suggestionsKey changes)
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   const exampleQuestions = useMemo(() => selectRandom(EXAMPLE_QUESTIONS, 4), [suggestionsKey])
 
   const handleAskAboutQuery = (question: string, _sql: string, rowCount: number) => {

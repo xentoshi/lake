@@ -1,5 +1,5 @@
 import { useAuth } from '../../contexts/AuthContext'
-import { MessageSquare, Infinity } from 'lucide-react'
+import { MessageSquare, Infinity as InfinityIcon } from 'lucide-react'
 
 interface QuotaIndicatorProps {
   compact?: boolean
@@ -33,7 +33,7 @@ export function QuotaIndicator({ compact = false }: QuotaIndicatorProps) {
       <div className={`flex items-center gap-1.5 text-xs ${colorClass}`}>
         <MessageSquare size={12} />
         {isUnlimited ? (
-          <Infinity size={14} />
+          <InfinityIcon size={14} />
         ) : (
           <span>{remaining}</span>
         )}
@@ -48,7 +48,7 @@ export function QuotaIndicator({ compact = false }: QuotaIndicatorProps) {
         <span className={colorClass}>
           {isUnlimited ? (
             <span className="flex items-center gap-1">
-              Unlimited <Infinity size={14} />
+              Unlimited <InfinityIcon size={14} />
             </span>
           ) : (
             `${remaining} / ${limit}`

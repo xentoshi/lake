@@ -2,7 +2,6 @@ import { cn } from '@/lib/utils'
 
 interface TabsProps {
   value: string
-  onValueChange: (value: string) => void
   children: React.ReactNode
 }
 
@@ -23,7 +22,7 @@ interface TabsContentProps {
   className?: string
 }
 
-export function Tabs({ value, onValueChange: _onValueChange, children }: TabsProps) {
+export function Tabs({ value, children }: TabsProps) {
   return (
     <div data-state={value} className="flex flex-col h-full">
       {Array.isArray(children)

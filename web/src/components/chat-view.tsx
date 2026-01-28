@@ -125,6 +125,7 @@ export function SimplifiedChatView() {
       setSearchParams({}, { replace: true })
       handleSendMessageForNewChat(initialQuestion)
     }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [searchParams, sessionId, isCreatingSession, setSearchParams])
 
   // Create session and navigate (for /chat route)

@@ -1,5 +1,6 @@
 // Link type colors (distinct from device type colors: yellow, orange, cyan)
 // Avoid green/red as those indicate status
+// eslint-disable-next-line react-refresh/only-export-components
 export const LINK_TYPE_COLORS: Record<string, { light: string; dark: string }> = {
   WAN: { light: '#6b7280', dark: '#9ca3af' },           // gray - inter-metro wide area
   DZX: { light: '#7c3aed', dark: '#a78bfa' },           // purple - local exchange

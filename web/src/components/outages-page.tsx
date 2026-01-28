@@ -195,7 +195,7 @@ export function OutagesPage() {
     refetchInterval: 60000, // Refresh every minute
   })
 
-  const outages = data?.outages || []
+  const outages = useMemo(() => data?.outages || [], [data?.outages])
   const summary = data?.summary || { total: 0, ongoing: 0, by_type: { status: 0, packet_loss: 0 } }
 
   // Sort state

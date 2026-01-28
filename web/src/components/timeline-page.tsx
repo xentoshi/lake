@@ -882,7 +882,7 @@ export function TimelinePage() {
   const [searchParams, setSearchParams] = useSearchParams()
   const searchParam = searchParams.get('search') || ''
   // Parse comma-separated filters
-  const searchFilters = searchParam ? searchParam.split(',').map(f => f.trim()).filter(Boolean) : []
+  const searchFilters = useMemo(() => searchParam ? searchParam.split(',').map(f => f.trim()).filter(Boolean) : [], [searchParam])
 
   // Initialize state from URL params
   const initialTimeRange = (searchParams.get('range') || '24h') as TimeRange | 'custom'

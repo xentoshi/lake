@@ -456,6 +456,7 @@ function InterfaceIssueChart({ devicePk, timeRange, buckets, controlsWidth = 'w-
   // In values are positive (above x-axis), out values are negative (below x-axis)
   const chartData = data.interfaces[0].hours.map((hour, idx) => {
     const date = new Date(hour.hour)
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const point: Record<string, any> = {
       time: date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
       fullTime: hour.hour,
@@ -477,6 +478,7 @@ function InterfaceIssueChart({ devicePk, timeRange, buckets, controlsWidth = 'w-
   })
 
   // Custom tooltip
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const CustomTooltip = ({ active, payload }: any) => {
     if (!active || !payload || payload.length === 0) return null
     const data = payload[0]?.payload
@@ -826,6 +828,7 @@ export function DeviceStatusTimelines({
       const health = devicesWithHealth.get(device.code)
       if (health) {
         const filterHealth = health === 'no_data' ? 'unhealthy' : health
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
         return healthFilters.includes(filterHealth as any)
       }
       return false
@@ -888,6 +891,7 @@ export function DeviceStatusTimelines({
 
       return bIndex - aIndex
     })
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [data?.devices, issueFilters, healthFilters, noIssuesSelected, issueTypesSelected, devicesWithIssues, devicesWithHealth])
 
   if (isLoading) {

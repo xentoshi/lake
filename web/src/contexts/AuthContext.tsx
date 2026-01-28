@@ -215,6 +215,7 @@ export function AuthProvider({ children, googleClientId, onLoginSuccess, onLogou
     return () => {
       document.body.removeChild(script)
     }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [googleClientId])
 
   const handleGoogleCallback = async (response: { credential: string }) => {
@@ -304,6 +305,7 @@ export function AuthProvider({ children, googleClientId, onLoginSuccess, onLogou
     } finally {
       setIsLoading(false)
     }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [wallet.publicKey, wallet.signMessage, refreshAuth, onLoginSuccess])
 
   const logout = useCallback(async () => {
@@ -342,6 +344,7 @@ export function AuthProvider({ children, googleClientId, onLoginSuccess, onLogou
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>
 }
 
+// eslint-disable-next-line react-refresh/only-export-components
 export function useAuth() {
   const context = useContext(AuthContext)
   if (context === undefined) {

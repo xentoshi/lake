@@ -797,6 +797,7 @@ export function TopologyGraph({
       .finally(() => {
         setPathLoading(false)
       })
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [mode, pathSource, pathTarget, pathMode])
 
   // Fetch reverse paths when showReverse is enabled
@@ -859,6 +860,7 @@ export function TopologyGraph({
       .finally(() => {
         setMetroPathLoading(false)
       })
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [mode, metroPathSource, metroPathTarget, pathMode])
 
   // Highlight paths on graph - show all paths with different colors, selected path is prominent
@@ -2748,7 +2750,7 @@ export function TopologyGraph({
             'z-index': 9999,
           },
         },
-      ], [isDark, getDeviceTypeColor, getNodeSize])
+      ], [isDark, getNodeSize])
 
   // Initialize Cytoscape and sync data
   useEffect(() => {
@@ -3363,7 +3365,7 @@ export function TopologyGraph({
 
     window.addEventListener('keydown', handleKeyDown)
     return () => window.removeEventListener('keydown', handleKeyDown)
-  }, [mode, impactDevices, clearImpactDevices, selectedDevicePK])
+  }, [mode, impactDevices, clearImpactDevices, selectedDevicePK, closePanel, panel.content, setMode, toggleMode, toggleOverlay])
 
   // Apply impact-device class when impactDevices changes (including from URL restoration)
   useEffect(() => {

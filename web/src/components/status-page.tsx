@@ -1430,6 +1430,7 @@ function useBucketCount() {
 }
 
 // Links tab content
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
 function LinksContent({ status, linkHistory, criticalLinks }: { status: StatusResponse; linkHistory: any; criticalLinks: CriticalLinksResponse | undefined }) {
   const [timeRange, setTimeRange] = useState<TimeRange>('24h')
   const [issueFilters, setIssueFilters] = useState<IssueFilter[]>(['packet_loss', 'high_latency', 'high_utilization', 'extended_loss', 'drained', 'interface_errors', 'discards', 'carrier_transitions'])
@@ -2603,6 +2604,7 @@ function MetrosContent({
   isLoading,
   metroNames,
 }: {
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   linkHistory: any
   criticalLinks: CriticalLinksResponse | undefined
   isLoading: boolean

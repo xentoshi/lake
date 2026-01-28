@@ -1,3 +1,4 @@
+/* eslint-disable react-refresh/only-export-components */
 import { AlertCircle, RefreshCw, WifiOff } from 'lucide-react'
 
 export interface ErrorStateProps {

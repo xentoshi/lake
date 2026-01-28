@@ -299,12 +299,12 @@ export function SearchSpotlight({ isOpen, onClose }: SearchSpotlightProps) {
   // Determine what to show
   const showRecentSearches = query.length === 0 && recentSearches.length > 0
   // Filter suggestions to only metros when on performance page
-  const suggestions = isPerformancePage
+  const suggestions = useMemo(() => isPerformancePage
     ? (data?.suggestions || []).filter(s => s.type === 'metro')
-    : (data?.suggestions || [])
+    : (data?.suggestions || []), [isPerformancePage, data?.suggestions])
 
   // Get the appropriate field prefixes based on current page
-  const getFieldPrefixes = () => {
+  const getFieldPrefixes = useCallback(() => {
     // In global search mode, use the global field prefixes
     if (globalSearchMode) return fieldPrefixes
     if (isValidatorsPage) return validatorFieldPrefixes
@@ -316,12 +316,12 @@ export function SearchSpotlight({ isOpen, onClose }: SearchSpotlightProps) {
     if (isUsersPage) return userFieldPrefixes
     if (isPerformancePage) return [] // Only metros on performance page
     return fieldPrefixes
-  }
+  }, [globalSearchMode, isValidatorsPage, isGossipNodesPage, isDevicesPage, isLinksPage, isMetrosPage, isContributorsPage, isUsersPage, isPerformancePage])
 
   // Check if query matches any field prefix
-  const matchingPrefixes = query.length > 0 && !query.includes(':')
+  const matchingPrefixes = useMemo(() => query.length > 0 && !query.includes(':')
     ? getFieldPrefixes().filter(p => p.prefix.toLowerCase().startsWith(query.toLowerCase()))
-    : []
+    : [], [query, getFieldPrefixes])
 
   // Show all field prefixes when query is empty on table pages (only in filter mode)
   const showFieldHints = query.length === 0 && useTableFilterMode
@@ -332,49 +332,53 @@ export function SearchSpotlight({ isOpen, onClose }: SearchSpotlightProps) {
     : recentSearches
 
   // Build items list
-  const items: (SearchSuggestion | { type: 'prefix'; prefix: string; description: string } | { type: 'recent'; item: SearchSuggestion } | { type: 'ask-ai' } | { type: 'filter-timeline' } | { type: 'filter-table' } | { type: 'field-value'; field: string; value: string })[] = []
+  const items = useMemo(() => {
+    const result: (SearchSuggestion | { type: 'prefix'; prefix: string; description: string } | { type: 'recent'; item: SearchSuggestion } | { type: 'ask-ai' } | { type: 'filter-timeline' } | { type: 'filter-table' } | { type: 'field-value'; field: string; value: string })[] = []
 
-  // Add "Filter timeline" option at the top when on timeline page with a query
-  if (isTimelinePage && query.length >= 1) {
-    items.push({ type: 'filter-timeline' as const })
-  }
+    // Add "Filter timeline" option at the top when on timeline page with a query
+    if (isTimelinePage && query.length >= 1) {
+      result.push({ type: 'filter-timeline' as const })
+    }
 
-  // Add "Filter table" option when on table pages with a query (only in filter mode)
-  // But not when we're showing field value autocomplete
-  if (useTableFilterMode && query.length >= 1 && filteredFieldValues.length === 0) {
-    items.push({ type: 'filter-table' as const })
-  }
+    // Add "Filter table" option when on table pages with a query (only in filter mode)
+    // But not when we're showing field value autocomplete
+    if (useTableFilterMode && query.length >= 1 && filteredFieldValues.length === 0) {
+      result.push({ type: 'filter-table' as const })
+    }
 
-  // Show field value autocomplete when user has typed a field prefix
-  if (filteredFieldValues.length > 0 && fieldValueMatch) {
-    items.push(...filteredFieldValues.map(v => ({
-      type: 'field-value' as const,
-      field: fieldValueMatch.field,
-      value: v
-    })))
-  }
+    // Show field value autocomplete when user has typed a field prefix
+    if (filteredFieldValues.length > 0 && fieldValueMatch) {
+      result.push(...filteredFieldValues.map(v => ({
+        type: 'field-value' as const,
+        field: fieldValueMatch.field,
+        value: v
+      })))
+    }
 
-  // Show field hints when empty on validators/gossip pages
-  if (showFieldHints) {
-    items.push(...getFieldPrefixes().map(p => ({ type: 'prefix' as const, prefix: p.prefix, description: p.description })))
-  } else if (matchingPrefixes.length > 0 && filteredFieldValues.length === 0) {
-    items.push(...matchingPrefixes.map(p => ({ type: 'prefix' as const, prefix: p.prefix, description: p.description })))
-  }
+    // Show field hints when empty on validators/gossip pages
+    if (showFieldHints) {
+      result.push(...getFieldPrefixes().map(p => ({ type: 'prefix' as const, prefix: p.prefix, description: p.description })))
+    } else if (matchingPrefixes.length > 0 && filteredFieldValues.length === 0) {
+      result.push(...matchingPrefixes.map(p => ({ type: 'prefix' as const, prefix: p.prefix, description: p.description })))
+    }
 
-  // Show recent searches only when NOT in table filter mode (they're for navigation, not filtering)
-  if (showRecentSearches && !useTableFilterMode) {
-    items.push(...filteredRecentSearches.map(item => ({ type: 'recent' as const, item })))
-  }
+    // Show recent searches only when NOT in table filter mode (they're for navigation, not filtering)
+    if (showRecentSearches && !useTableFilterMode) {
+      result.push(...filteredRecentSearches.map(item => ({ type: 'recent' as const, item })))
+    }
 
-  // Only show global suggestions when NOT in table filter mode
-  if (!showRecentSearches && filteredFieldValues.length === 0 && !useTableFilterMode) {
-    items.push(...suggestions)
-  }
+    // Only show global suggestions when NOT in table filter mode
+    if (!showRecentSearches && filteredFieldValues.length === 0 && !useTableFilterMode) {
+      result.push(...suggestions)
+    }
 
-  // Add "Ask AI" option when there's a query (not on performance page or table filter mode)
-  if (query.length >= 2 && !isPerformancePage && !useTableFilterMode && filteredFieldValues.length === 0) {
-    items.push({ type: 'ask-ai' as const })
-  }
+    // Add "Ask AI" option when there's a query (not on performance page or table filter mode)
+    if (query.length >= 2 && !isPerformancePage && !useTableFilterMode && filteredFieldValues.length === 0) {
+      result.push({ type: 'ask-ai' as const })
+    }
+
+    return result
+  }, [isTimelinePage, query, useTableFilterMode, filteredFieldValues, fieldValueMatch, showFieldHints, getFieldPrefixes, matchingPrefixes, showRecentSearches, filteredRecentSearches, suggestions, isPerformancePage])
 
   // Reset selection when items change
   useEffect(() => {
@@ -462,7 +466,7 @@ export function SearchSpotlight({ isOpen, onClose }: SearchSpotlightProps) {
     } else {
       navigate(item.url)
     }
-  }, [navigate, addRecentSearch, onClose, isTopologyPage, isTimelinePage, addTimelineFilter, isStatusPage, isOutagesPage, addStatusFilter, isPerformancePage, addPerformanceFilter, location.pathname])
+  }, [navigate, addRecentSearch, onClose, isTopologyPage, isTimelinePage, addTimelineFilter, isStatusPage, isOutagesPage, addStatusFilter, isPerformancePage, addPerformanceFilter, location.pathname, addTableFilter, useTableFilterMode])
 
   const handleAskAI = useCallback((e?: React.MouseEvent) => {
     if (!query.trim()) return
@@ -520,7 +524,7 @@ export function SearchSpotlight({ isOpen, onClose }: SearchSpotlightProps) {
         e.preventDefault()
         setSelectedIndex(prev => Math.max(prev - 1, -1))
         break
-      case 'Enter':
+      case 'Enter': {
         e.preventDefault()
         // Use selected index, or default to first item if nothing selected
         const indexToUse = selectedIndex >= 0 ? selectedIndex : 0
@@ -544,6 +548,7 @@ export function SearchSpotlight({ isOpen, onClose }: SearchSpotlightProps) {
           }
         }
         break
+      }
       case 'Tab':
         if (selectedIndex >= 0 && selectedIndex < items.length) {
           const item = items[selectedIndex]

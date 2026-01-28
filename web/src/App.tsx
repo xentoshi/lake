@@ -268,6 +268,7 @@ function QueryEditorView() {
     }
     setMode(detectedType)
     setActiveMode(detectedType)
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [sessionId, latestHistoryEntry?.sql])
 
   const conversationHistory: HistoryMessage[] = generationHistory

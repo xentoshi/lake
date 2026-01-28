@@ -1,4 +1,4 @@
-import { Sun, Moon, Monitor, Wallet, Infinity } from 'lucide-react'
+import { Sun, Moon, Monitor, Wallet, Infinity as InfinityIcon } from 'lucide-react'
 import { useTheme } from '@/hooks/use-theme'
 import { useAuth } from '@/contexts/AuthContext'
 
@@ -50,7 +50,7 @@ export function SettingsPage() {
                 <div className="text-right">
                   {isUnlimited ? (
                     <div className="flex items-center gap-1 text-sm font-medium text-foreground">
-                      <Infinity className="h-4 w-4" />
+                      <InfinityIcon className="h-4 w-4" />
                       <span>Unlimited</span>
                     </div>
                   ) : (
