@@ -16,7 +16,7 @@ concurrency:
 permissions:
   contents: read
   packages: write
-  pull-requests: read
+  pull-requests: write
   id-token: write  # Required for AWS OIDC
 
 env:
@@ -136,3 +136,10 @@ jobs:
           labels: |
             org.opencontainers.image.source=${{ github.server_url }}/${{ github.repository }}
             org.opencontainers.image.revision=${{ github.sha }}
+
+      - name: Comment preview URL
+        if: github.event_name == 'pull_request'
+        uses: marocchino/sticky-pull-request-comment@v2
+        with:
+          message: |
+            🔗 Preview: https://pr-${{ github.event.pull_request.number }}.data.malbeclabs.com
