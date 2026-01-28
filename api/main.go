@@ -400,6 +400,7 @@ func main() {
 	r.Get("/api/status/device-history", handlers.GetDeviceHistory)
 	r.Get("/api/status/interface-issues", handlers.GetInterfaceIssues)
 	r.Get("/api/status/devices/{pk}/interface-history", handlers.GetDeviceInterfaceHistory)
+	r.Get("/api/status/links/{pk}/history", handlers.GetSingleLinkHistory)
 	r.Get("/api/timeline", handlers.GetTimeline)
 	r.Get("/api/timeline/bounds", handlers.GetTimelineBounds)
 
@@ -439,6 +440,9 @@ func main() {
 	r.Get("/api/stake/history", handlers.GetStakeHistory)
 	r.Get("/api/stake/changes", handlers.GetStakeChanges)
 	r.Get("/api/stake/validators", handlers.GetStakeValidators)
+
+	// Traffic analytics routes
+	r.Get("/api/traffic/data", handlers.GetTrafficData)
 
 	r.Get("/api/topology", handlers.GetTopology)
 	r.Get("/api/topology/traffic", handlers.GetTopologyTraffic)
