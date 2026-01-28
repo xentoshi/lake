@@ -2,10 +2,8 @@ name: release.docker
 
 on:
   push:
-    # NOTE: Update STAGING_BRANCHES env var below when changing this list
     branches:
       - main
-      - staging
   pull_request:
     types: [opened, synchronize, labeled]
   workflow_dispatch:
@@ -30,7 +28,7 @@ env:
   PREVIEW_ASSET_BUCKET: malbeclabs-lake-app-web-assets-previews
   PROD_ASSET_BUCKET: malbeclabs-lake-app-web-assets
   # Branches that auto-deploy to staging (space-separated)
-  STAGING_BRANCHES: "main staging"
+  STAGING_BRANCHES: "main"
 
 jobs:
   build-and-push:
