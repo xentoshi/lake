@@ -1,8 +1,9 @@
 import { useState, useEffect, useRef, useMemo } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { ChevronDown, GripVertical, Check, RefreshCw } from 'lucide-react'
-import { fetchTrafficData, fetchTopology } from '@/lib/api'
+import { fetchTrafficData, fetchTopology, fetchDiscardsData } from '@/lib/api'
 import { TrafficChart } from '@/components/traffic-chart-uplot'
+import { DiscardsChart } from '@/components/discards-chart'
 
 export interface LinkLookupInfo {
   pk: string
@@ -79,14 +80,18 @@ const aggLabels: Record<AggMethod, string> = {
   'avg': 'Average',
 }
 
-type ChartSection = 'non-tunnel-stacked' | 'non-tunnel' | 'tunnel-stacked' | 'tunnel'
+type ChartSection = 'non-tunnel-stacked' | 'non-tunnel' | 'tunnel-stacked' | 'tunnel' | 'discards'
 
 const chartSectionLabels: Record<ChartSection, string> = {
   'non-tunnel-stacked': 'Non-Tunnel Traffic (stacked)',
   'non-tunnel': 'Non-Tunnel Traffic',
   'tunnel-stacked': 'Tunnel Traffic (stacked)',
   'tunnel': 'Tunnel Traffic',
+  'discards': 'Interface Discards',
 }
+
+// All known chart sections (used to detect new sections added after localStorage was saved)
+const ALL_KNOWN_SECTIONS: ChartSection[] = ['non-tunnel-stacked', 'non-tunnel', 'tunnel-stacked', 'tunnel', 'discards']
 
 type Layout = '1x4' | '2x2'
 
@@ -419,9 +424,10 @@ export function TrafficPage() {
     'non-tunnel',
     'tunnel-stacked',
     'tunnel',
+    'discards',
   ])
   const [visibleSections, setVisibleSections] = useState<Set<ChartSection>>(
-    new Set(['non-tunnel-stacked', 'non-tunnel', 'tunnel-stacked', 'tunnel'])
+    new Set(['non-tunnel-stacked', 'non-tunnel', 'tunnel-stacked', 'tunnel', 'discards'])
   )
   const [layout, setLayout] = useState<Layout>('1x4')
   const [refreshInterval, setRefreshInterval] = useState<RefreshInterval>('never')
@@ -440,7 +446,15 @@ export function TrafficPage() {
     if (saved) {
       try {
         const sections = JSON.parse(saved) as ChartSection[]
-        setChartSections(sections)
+        // Add any new sections that weren't in localStorage
+        const missingSections = ALL_KNOWN_SECTIONS.filter(s => !sections.includes(s))
+        if (missingSections.length > 0) {
+          const updatedSections = [...sections, ...missingSections]
+          setChartSections(updatedSections)
+          localStorage.setItem('traffic-chart-sections', JSON.stringify(updatedSections))
+        } else {
+          setChartSections(sections)
+        }
       } catch {
         // Ignore invalid data
       }
@@ -453,7 +467,15 @@ export function TrafficPage() {
     if (saved) {
       try {
         const sections = JSON.parse(saved) as ChartSection[]
-        setVisibleSections(new Set(sections))
+        // Add any new sections that weren't in localStorage (make them visible by default)
+        const missingSections = ALL_KNOWN_SECTIONS.filter(s => !sections.includes(s))
+        if (missingSections.length > 0) {
+          const updatedSections = [...sections, ...missingSections]
+          setVisibleSections(new Set(updatedSections))
+          localStorage.setItem('traffic-visible-sections', JSON.stringify(updatedSections))
+        } else {
+          setVisibleSections(new Set(sections))
+        }
       } catch {
         // Ignore invalid data
       }
@@ -586,11 +608,24 @@ export function TrafficPage() {
     refetchInterval: refetchIntervalValue,
   })
 
+  // Fetch discards data
+  const {
+    data: discardsData,
+    isLoading: discardsLoading,
+    refetch: refetchDiscards,
+  } = useQuery({
+    queryKey: ['discards', timeRange, actualBucketSize],
+    queryFn: () => fetchDiscardsData(timeRange, actualBucketSize),
+    staleTime: 30000, // 30 seconds
+    refetchInterval: refetchIntervalValue,
+  })
+
   // Manual refresh handler
   const handleManualRefresh = () => {
     refetchTunnel()
     refetchNonTunnel()
     refetchTopology()
+    refetchDiscards()
   }
 
   // Build link lookup: device_pk + interface -> link info
@@ -621,6 +656,22 @@ export function TrafficPage() {
   // Render a chart section
   const renderChartSection = (section: ChartSection) => {
     if (!visibleSections.has(section)) return null
+
+    // Handle discards chart separately
+    if (section === 'discards') {
+      return (
+        <div key={section} className="border border-border rounded-lg p-4">
+          <LazyChart key={`${section}-${layout}`}>
+            <DiscardsChart
+              title="Interface Discards"
+              data={discardsData?.points || []}
+              series={discardsData?.series || []}
+              isLoading={discardsLoading}
+            />
+          </LazyChart>
+        </div>
+      )
+    }
 
     let title = ''
     let isTunnel = false
@@ -665,7 +716,7 @@ export function TrafficPage() {
             <div className="flex flex-col space-y-2">
               <h3 className="text-lg font-semibold">{title}</h3>
               <div className="border border-border rounded-lg p-8 flex items-center justify-center h-[400px]">
-                <p className="text-muted-foreground">Error: {error.toString()}</p>
+                <p className="text-muted-foreground">Error: {(error as Error).message || String(error)}</p>
               </div>
             </div>
           ) : data ? (
