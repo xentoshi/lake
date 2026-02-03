@@ -592,7 +592,12 @@ export interface ReadDocsStep {
   error?: string
 }
 
-export type ProcessingStep = ThinkingStep | SqlQueryStep | CypherQueryStep | ReadDocsStep
+export interface SynthesizingStep {
+  type: 'synthesizing'
+  id: string
+}
+
+export type ProcessingStep = ThinkingStep | SqlQueryStep | CypherQueryStep | ReadDocsStep | SynthesizingStep
 
 export interface ChatWorkflowData {
   dataQuestions: DataQuestion[]
@@ -636,6 +641,55 @@ export interface ChatResponse {
   error?: string
 }
 
+// Convert server workflow steps to client processing steps format
+export function serverStepsToProcessingSteps(steps: ServerWorkflowStep[]): ProcessingStep[] {
+  return steps.map(step => {
+    switch (step.type) {
+      case 'thinking':
+        return {
+          type: 'thinking' as const,
+          id: step.id,
+          content: step.content ?? '',
+        }
+      case 'sql_query':
+        return {
+          type: 'sql_query' as const,
+          id: step.id,
+          question: step.question ?? '',
+          sql: step.sql ?? '',
+          status: step.status ?? 'completed',
+          rows: step.count,
+          columns: step.columns,
+          data: step.rows,
+          error: step.error,
+        }
+      case 'cypher_query':
+        return {
+          type: 'cypher_query' as const,
+          id: step.id,
+          question: step.question ?? '',
+          cypher: step.cypher ?? '',
+          status: step.status ?? 'completed',
+          rows: step.count,
+          columns: step.columns,
+          data: step.rows,
+          nodes: step.nodes,
+          edges: step.edges,
+          error: step.error,
+        }
+      case 'read_docs':
+        return {
+          type: 'read_docs' as const,
+          id: step.id,
+          page: step.page ?? '',
+          status: step.status ?? 'completed',
+          content: step.content,
+          error: step.error,
+        }
+    }
+  })
+}
+
 export async function sendChatMessage(
   message: string,
   history: ChatMessage[],
@@ -668,6 +722,7 @@ export interface ChatStreamCallbacks {
   onReadDocsDone?: (data: { id: string; page: string; content: string; error: string }) => void
   // Workflow events
   onWorkflowStarted?: (data: { workflow_id: string }) => void
+  onSynthesizing?: () => void
   // Completion events
   onDone: (response: ChatResponse) => void
   onError: (error: string) => void
@@ -817,6 +872,9 @@ export async function sendChatMessageStream(
                 break
               case 'workflow_started':
                 callbacks.onWorkflowStarted?.(parsed)
+                break
+              case 'synthesizing':
+                callbacks.onSynthesizing?.()
                 break
               case 'status':
               case 'heartbeat':
@@ -2286,6 +2344,7 @@ export interface WorkflowReconnectCallbacks {
   onCypherDone?: (data: { id: string; question: string; cypher: string; rows: number; error: string }) => void
   // ReadDocs events
   onReadDocsDone?: (data: { id: string; page: string; content: string; error: string }) => void
+  onSynthesizing?: () => void
   onDone: (response: ChatResponse) => void
   onError: (error: string) => void
   onStatus?: (data: { status: string; iteration: number }) => void
@@ -2349,6 +2408,9 @@ export async function reconnectToWorkflow(
             // ReadDocs events
             case 'read_docs_done':
               callbacks.onReadDocsDone?.(parsed)
+              break
+            case 'synthesizing':
+              callbacks.onSynthesizing?.()
               break
             case 'done':
               callbacks.onDone(parsed)
