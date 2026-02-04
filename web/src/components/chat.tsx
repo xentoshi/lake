@@ -11,7 +11,7 @@ import { useEnv } from '@/contexts/EnvContext'
 import { LoginModal } from '@/components/auth/LoginModal'
 import { formatNeo4jValue, isNeo4jValue } from '@/lib/neo4j-utils'
 
-// Format error message for display
+// Format error message for display (used for message.status === 'error')
 function formatErrorMessage(content: string): { message: string; isQuotaError: boolean; resetsAt?: Date } {
   try {
     const parsed = JSON.parse(content)
@@ -28,6 +28,44 @@ function formatErrorMessage(content: string): { message: string; isQuotaError: b
     // Not JSON, return as-is
   }
   return { message: content, isQuotaError: false }
+}
+
+// Format stream error into user-friendly message
+function formatStreamError(error: string): string {
+  const lower = error.toLowerCase()
+
+  // Authentication errors (invalid API key, etc.)
+  if (lower.includes('401') || lower.includes('unauthorized') || lower.includes('authentication_error') || lower.includes('invalid') && lower.includes('api-key')) {
+    return 'Unable to connect to AI service. Please try again later.'
+  }
+
+  // Rate limiting
+  if (lower.includes('429') || lower.includes('rate_limit') || lower.includes('too many requests')) {
+    return 'The AI service is busy. Please wait a moment and try again.'
+  }
+
+  // Overloaded
+  if (lower.includes('overloaded') || lower.includes('529')) {
+    return 'The AI service is temporarily overloaded. Please try again in a few minutes.'
+  }
+
+  // Server errors
+  if (lower.includes('500') || lower.includes('502') || lower.includes('503') || lower.includes('504') || lower.includes('internal server error')) {
+    return 'The AI service is experiencing issues. Please try again later.'
+  }
+
+  // Connection/network errors
+  if (lower.includes('connection') || lower.includes('network') || lower.includes('fetch') || lower.includes('timeout')) {
+    return 'Connection lost. Please check your network and try again.'
+  }
+
+  // Quota errors
+  if (lower.includes('quota') || lower.includes('limit exceeded')) {
+    return 'Daily question limit reached. Please try again tomorrow.'
+  }
+
+  // Default: show a generic message
+  return 'Something went wrong. Please try again.'
 }
 
 // Format reset time for display
@@ -607,13 +645,14 @@ interface ChatProps {
   messages: ChatMessage[]
   isPending: boolean
   processingSteps?: ProcessingStep[]
+  streamError?: string | null
   onSendMessage: (message: string) => void
   onAbort: () => void
   onRetry?: () => void
   onOpenInQueryEditor?: (query: string, type: 'sql' | 'cypher', env?: string) => void
 }
 
-export function Chat({ messages, isPending, processingSteps, onSendMessage, onAbort, onRetry, onOpenInQueryEditor }: ChatProps) {
+export function Chat({ messages, isPending, processingSteps, streamError, onSendMessage, onAbort, onRetry, onOpenInQueryEditor }: ChatProps) {
   const { features } = useEnv()
   const [input, setInput] = useState('')
   const [highlightedQueries, setHighlightedQueries] = useState<Map<number, number | null>>(new Map()) // messageIndex -> queryIndex
@@ -1019,6 +1058,23 @@ export function Chat({ messages, isPending, processingSteps, onSendMessage, onAb
                 </div>
               ) : null
             })()}
+            {/* Stream error display */}
+            {streamError && !isPending && (
+              <div className="px-1 mt-3 flex items-center gap-2 text-sm text-muted-foreground">
+                <XCircle className="w-4 h-4 text-red-500 flex-shrink-0" />
+                <span>{formatStreamError(streamError)}</span>
+                {onRetry && (
+                  <button
+                    onClick={onRetry}
+                    disabled={isPending}
+                    className="inline-flex items-center gap-1 text-muted-foreground hover:text-foreground transition-colors disabled:opacity-50"
+                  >
+                    <RotateCcw className="w-3.5 h-3.5" />
+                    <span>Retry</span>
+                  </button>
+                )}
+              </div>
+            )}
             <div ref={messagesEndRef} />
           </div>
         </div>
