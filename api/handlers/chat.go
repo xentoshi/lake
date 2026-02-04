@@ -22,7 +22,40 @@ import (
 type ChatMessage struct {
 	Role            string   `json:"role"` // "user" or "assistant"
 	Content         string   `json:"content"`
+	Env             string   `json:"env,omitempty"`             // Environment this message was sent in
 	ExecutedQueries []string `json:"executedQueries,omitempty"` // SQL from previous turns
+}
+
+// convertHistory converts chat messages to workflow format, annotating messages
+// that were sent in a different environment than the current request.
+func convertHistory(messages []ChatMessage, currentEnv DZEnv) []workflow.ConversationMessage {
+	var history []workflow.ConversationMessage
+	// Track env of preceding user message to annotate assistant responses too
+	var prevUserEnv string
+	for _, msg := range messages {
+		content := msg.Content
+		if msg.Role == "user" {
+			prevUserEnv = msg.Env
+		}
+		// Determine if this message was from a different env
+		msgEnv := msg.Env
+		if msgEnv == "" && msg.Role == "assistant" {
+			msgEnv = prevUserEnv // assistant inherits env from the preceding user message
+		}
+		if msgEnv != "" && DZEnv(msgEnv) != currentEnv {
+			if msg.Role == "user" {
+				content = fmt.Sprintf("[This question was asked while viewing %s data, not %s — the numbers and results below are from %s]\n%s", msgEnv, string(currentEnv), msgEnv, content)
+			} else {
+				content = fmt.Sprintf("[This answer was based on %s data, not %s]\n%s", msgEnv, string(currentEnv), content)
+			}
+		}
+		history = append(history, workflow.ConversationMessage{
+			Role:            msg.Role,
+			Content:         content,
+			ExecutedQueries: msg.ExecutedQueries,
+		})
+	}
+	return history
 }
 
 // ChatRequest is the incoming request for a chat message.
@@ -124,11 +157,15 @@ func Chat(w http.ResponseWriter, r *http.Request) {
 		MaxTokens:     4096,
 	}
 
-	// Add Neo4j support if available
-	if config.Neo4jClient != nil {
+	// Add Neo4j support if available (mainnet only)
+	env := EnvFromContext(r.Context())
+	if config.Neo4jClient != nil && env == EnvMainnet {
 		cfg.GraphQuerier = NewNeo4jQuerier()
 		cfg.GraphSchemaFetcher = NewNeo4jSchemaFetcher()
 	}
+
+	// Add env context to agent
+	cfg.EnvContext = BuildEnvContext(env)
 
 	// Create and run workflow
 	wf, err := v3.New(cfg)
@@ -138,15 +175,8 @@ func Chat(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Convert history to workflow format
-	var history []workflow.ConversationMessage
-	for _, msg := range req.History {
-		history = append(history, workflow.ConversationMessage{
-			Role:            msg.Role,
-			Content:         msg.Content,
-			ExecutedQueries: msg.ExecutedQueries,
-		})
-	}
+	// Convert history to workflow format (annotates cross-env messages)
+	history := convertHistory(req.History, EnvFromContext(r.Context()))
 
 	result, err := wf.RunWithHistory(r.Context(), req.Message, history)
 	if err != nil {
@@ -382,15 +412,8 @@ func ChatStream(w http.ResponseWriter, r *http.Request) {
 		// Continue even on error - don't block the user
 	}
 
-	// Convert history to workflow format
-	var history []workflow.ConversationMessage
-	for _, msg := range req.History {
-		history = append(history, workflow.ConversationMessage{
-			Role:            msg.Role,
-			Content:         msg.Content,
-			ExecutedQueries: msg.ExecutedQueries,
-		})
-	}
+	// Convert history to workflow format (annotates cross-env messages)
+	history := convertHistory(req.History, EnvFromContext(ctx))
 
 	// Use v3 workflow
 	chatStreamV3(ctx, req, history, sendEvent)
@@ -411,8 +434,8 @@ func chatStreamV3(ctx context.Context, req ChatRequest, history []workflow.Conve
 		return
 	}
 
-	// Start the workflow in background
-	workflowID, err := Manager.StartWorkflow(sessionUUID, req.Message, history, req.Format)
+	// Start the workflow in background with env from request context
+	workflowID, err := Manager.StartWorkflow(sessionUUID, req.Message, history, req.Format, EnvFromContext(ctx))
 	if err != nil {
 		slog.Error("Failed to start background workflow", "session_id", req.SessionID, "error", err)
 		// Don't expose internal errors to the UI

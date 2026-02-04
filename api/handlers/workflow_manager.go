@@ -33,6 +33,7 @@ type runningWorkflow struct {
 	SessionID        uuid.UUID
 	Question         string
 	Format           string // Output format: "slack" for Slack-specific formatting
+	Env              DZEnv  // Environment for this workflow
 	Cancel           context.CancelFunc
 	ExistingMessages []SessionChatMessage // Messages that existed before this workflow started
 	subscribers      map[*WorkflowSubscriber]struct{}
@@ -97,6 +98,7 @@ type SessionChatMessage struct {
 	ID              string               `json:"id"`
 	Role            string               `json:"role"` // "user" or "assistant"
 	Content         string               `json:"content"`
+	Env             string               `json:"env,omitempty"` // Environment this message was sent in
 	WorkflowData    *SessionWorkflowData `json:"workflowData,omitempty"`
 	ExecutedQueries []string             `json:"executedQueries,omitempty"`
 	Status          string               `json:"status,omitempty"` // "streaming", "complete", "error"
@@ -141,6 +143,9 @@ type ClientProcessingStep struct {
 
 	// For read_docs steps
 	Page string `json:"page,omitempty"`
+
+	// Environment this step was executed in
+	Env string `json:"env,omitempty"`
 }
 
 // toClientFormat converts a WorkflowStep to ClientProcessingStep format.
@@ -160,6 +165,7 @@ func (s WorkflowStep) toClientFormat() ClientProcessingStep {
 		Nodes:    s.Nodes,
 		Edges:    s.Edges,
 		Page:     s.Page,
+		Env:      s.Env,
 	}
 }
 
@@ -204,6 +210,7 @@ func buildSessionMessages(
 	existingMessages []SessionChatMessage,
 	workflowID uuid.UUID,
 	question string,
+	env string,
 	answer string,
 	status string,
 	steps []WorkflowStep,
@@ -237,6 +244,7 @@ func buildSessionMessages(
 			ID:      uuid.NewString(),
 			Role:    "user",
 			Content: question,
+			Env:     env,
 		})
 	}
 
@@ -293,8 +301,15 @@ func (m *WorkflowManager) StartWorkflow(
 	question string,
 	history []workflow.ConversationMessage,
 	format string,
+	env ...DZEnv,
 ) (uuid.UUID, error) {
 	ctx := context.Background()
+
+	// Determine environment (default to mainnet)
+	workflowEnv := EnvMainnet
+	if len(env) > 0 {
+		workflowEnv = env[0]
+	}
 
 	// Ensure session exists (auto-create if needed for workflow persistence)
 	if err := ensureSessionExists(ctx, sessionID); err != nil {
@@ -310,14 +325,14 @@ func (m *WorkflowManager) StartWorkflow(
 	}
 
 	// Create workflow run in database
-	run, err := CreateWorkflowRun(ctx, sessionID, question)
+	run, err := CreateWorkflowRun(ctx, sessionID, question, string(workflowEnv))
 	if err != nil {
 		return uuid.Nil, fmt.Errorf("failed to create workflow: %w", err)
 	}
 
 	// Initialize session content with user message and streaming assistant message
 	// Appends to existing messages to preserve conversation history
-	initialMessages := buildSessionMessages(existingMessages, run.ID, question, "", "streaming", nil, nil, nil)
+	initialMessages := buildSessionMessages(existingMessages, run.ID, question, string(workflowEnv), "", "streaming", nil, nil, nil)
 	if err := updateSessionContent(ctx, sessionID, initialMessages); err != nil {
 		slog.Warn("Failed to initialize session content", "session_id", sessionID, "error", err)
 	}
@@ -325,6 +340,7 @@ func (m *WorkflowManager) StartWorkflow(
 	// Create cancellable context for the workflow with session/workflow IDs for tracing
 	workflowCtx, cancel := context.WithCancel(context.Background())
 	workflowCtx = workflow.ContextWithWorkflowIDs(workflowCtx, sessionID.String(), run.ID.String())
+	workflowCtx = ContextWithEnv(workflowCtx, workflowEnv)
 
 	// Track the running workflow
 	rw := &runningWorkflow{
@@ -332,6 +348,7 @@ func (m *WorkflowManager) StartWorkflow(
 		SessionID:        sessionID,
 		Question:         question,
 		Format:           format,
+		Env:              workflowEnv,
 		Cancel:           cancel,
 		ExistingMessages: existingMessages,
 		subscribers:      make(map[*WorkflowSubscriber]struct{}),
@@ -459,11 +476,14 @@ func (m *WorkflowManager) runWorkflow(
 		cfg.FormatContext = prompts.Slack
 	}
 
-	// Add Neo4j support if available
-	if config.Neo4jClient != nil {
+	// Add Neo4j support if available (mainnet only)
+	if config.Neo4jClient != nil && rw.Env == EnvMainnet {
 		cfg.GraphQuerier = NewNeo4jQuerier()
 		cfg.GraphSchemaFetcher = NewNeo4jSchemaFetcher()
 	}
+
+	// Add env context to agent
+	cfg.EnvContext = BuildEnvContext(rw.Env)
 
 	// Create workflow
 	wf, err := v3.New(cfg)
@@ -518,6 +538,7 @@ func (m *WorkflowManager) runWorkflow(
 			if progress.SQLError != "" {
 				status = "error"
 			}
+			envStr := string(rw.Env)
 			steps = append(steps, WorkflowStep{
 				ID:       stepID,
 				Type:     "sql_query",
@@ -526,6 +547,7 @@ func (m *WorkflowManager) runWorkflow(
 				Status:   status,
 				Count:    progress.SQLRows,
 				Error:    progress.SQLError,
+				Env:      envStr,
 			})
 			rw.broadcast(WorkflowEvent{
 				Type: "sql_done",
@@ -535,6 +557,7 @@ func (m *WorkflowManager) runWorkflow(
 					"sql":      progress.SQL,
 					"rows":     progress.SQLRows,
 					"error":    progress.SQLError,
+					"env":      envStr,
 				},
 			})
 
@@ -556,6 +579,7 @@ func (m *WorkflowManager) runWorkflow(
 			if progress.CypherError != "" {
 				status = "error"
 			}
+			envStr := string(rw.Env)
 			steps = append(steps, WorkflowStep{
 				ID:       stepID,
 				Type:     "cypher_query",
@@ -564,6 +588,7 @@ func (m *WorkflowManager) runWorkflow(
 				Status:   status,
 				Count:    progress.CypherRows,
 				Error:    progress.CypherError,
+				Env:      envStr,
 			})
 			rw.broadcast(WorkflowEvent{
 				Type: "cypher_done",
@@ -573,6 +598,7 @@ func (m *WorkflowManager) runWorkflow(
 					"cypher":   progress.Cypher,
 					"rows":     progress.CypherRows,
 					"error":    progress.CypherError,
+					"env":      envStr,
 				},
 			})
 
@@ -635,6 +661,7 @@ func (m *WorkflowManager) runWorkflow(
 			if progress.QueryError != "" {
 				status = "error"
 			}
+			envStr := string(rw.Env)
 			steps = append(steps, WorkflowStep{
 				ID:       stepID,
 				Type:     "sql_query",
@@ -643,6 +670,7 @@ func (m *WorkflowManager) runWorkflow(
 				Status:   status,
 				Count:    progress.QueryRows,
 				Error:    progress.QueryError,
+				Env:      envStr,
 			})
 			rw.broadcast(WorkflowEvent{
 				Type: "sql_done",
@@ -652,6 +680,7 @@ func (m *WorkflowManager) runWorkflow(
 					"sql":      progress.QuerySQL,
 					"rows":     progress.QueryRows,
 					"error":    progress.QueryError,
+					"env":      envStr,
 				},
 			})
 		}
@@ -679,7 +708,7 @@ func (m *WorkflowManager) runWorkflow(
 		}
 
 		// Also update session content with current progress (preserving existing messages)
-		sessionMessages := buildSessionMessages(rw.ExistingMessages, rw.ID, question, "", "streaming", steps, state.ExecutedQueries, nil)
+		sessionMessages := buildSessionMessages(rw.ExistingMessages, rw.ID, question, string(rw.Env), "", "streaming", steps, state.ExecutedQueries, nil)
 		if err := updateSessionContent(ctx, rw.SessionID, sessionMessages); err != nil {
 			slog.Warn("Failed to update session content at checkpoint", "session_id", rw.SessionID, "error", err)
 		}
@@ -727,7 +756,7 @@ func (m *WorkflowManager) runWorkflow(
 	}
 
 	// Update session content with final answer and status 'complete' (preserving existing messages)
-	finalMessages := buildSessionMessages(rw.ExistingMessages, rw.ID, question, result.Answer, "complete", finalSteps, result.ExecutedQueries, result.FollowUpQuestions)
+	finalMessages := buildSessionMessages(rw.ExistingMessages, rw.ID, question, string(rw.Env), result.Answer, "complete", finalSteps, result.ExecutedQueries, result.FollowUpQuestions)
 	if err := updateSessionContent(context.Background(), rw.SessionID, finalMessages); err != nil {
 		slog.Warn("Failed to update session content on completion", "session_id", rw.SessionID, "error", err)
 	}
@@ -795,14 +824,20 @@ func (m *WorkflowManager) ResumeWorkflowBackground(run *WorkflowRun) error {
 		existingMessages = nil
 	}
 
-	// Create cancellable context
+	// Create cancellable context with env from persisted workflow
 	workflowCtx, cancel := context.WithCancel(context.Background())
+	resumeEnv := DZEnv(run.Env)
+	if !ValidEnvs[resumeEnv] {
+		resumeEnv = EnvMainnet
+	}
+	workflowCtx = ContextWithEnv(workflowCtx, resumeEnv)
 
 	// Track the running workflow
 	rw := &runningWorkflow{
 		ID:               run.ID,
 		SessionID:        run.SessionID,
 		Question:         run.UserQuestion,
+		Env:              resumeEnv,
 		Cancel:           cancel,
 		ExistingMessages: existingMessages,
 		subscribers:      make(map[*WorkflowSubscriber]struct{}),
@@ -865,11 +900,14 @@ func (m *WorkflowManager) resumeWorkflow(
 		cfg.FormatContext = prompts.Slack
 	}
 
-	// Add Neo4j support if available
-	if config.Neo4jClient != nil {
+	// Add Neo4j support if available (mainnet only)
+	if config.Neo4jClient != nil && rw.Env == EnvMainnet {
 		cfg.GraphQuerier = NewNeo4jQuerier()
 		cfg.GraphSchemaFetcher = NewNeo4jSchemaFetcher()
 	}
+
+	// Add env context to agent
+	cfg.EnvContext = BuildEnvContext(rw.Env)
 
 	// Create workflow
 	wf, err := v3.New(cfg)
@@ -924,6 +962,7 @@ func (m *WorkflowManager) resumeWorkflow(
 			if progress.SQLError != "" {
 				status = "error"
 			}
+			envStr := string(rw.Env)
 			steps = append(steps, WorkflowStep{
 				ID:       stepID,
 				Type:     "sql_query",
@@ -932,6 +971,7 @@ func (m *WorkflowManager) resumeWorkflow(
 				Status:   status,
 				Count:    progress.SQLRows,
 				Error:    progress.SQLError,
+				Env:      envStr,
 			})
 			rw.broadcast(WorkflowEvent{
 				Type: "sql_done",
@@ -941,6 +981,7 @@ func (m *WorkflowManager) resumeWorkflow(
 					"sql":      progress.SQL,
 					"rows":     progress.SQLRows,
 					"error":    progress.SQLError,
+					"env":      envStr,
 				},
 			})
 
@@ -962,6 +1003,7 @@ func (m *WorkflowManager) resumeWorkflow(
 			if progress.CypherError != "" {
 				status = "error"
 			}
+			envStr := string(rw.Env)
 			steps = append(steps, WorkflowStep{
 				ID:       stepID,
 				Type:     "cypher_query",
@@ -970,6 +1012,7 @@ func (m *WorkflowManager) resumeWorkflow(
 				Status:   status,
 				Count:    progress.CypherRows,
 				Error:    progress.CypherError,
+				Env:      envStr,
 			})
 			rw.broadcast(WorkflowEvent{
 				Type: "cypher_done",
@@ -979,6 +1022,7 @@ func (m *WorkflowManager) resumeWorkflow(
 					"cypher":   progress.Cypher,
 					"rows":     progress.CypherRows,
 					"error":    progress.CypherError,
+					"env":      envStr,
 				},
 			})
 
@@ -1041,6 +1085,7 @@ func (m *WorkflowManager) resumeWorkflow(
 			if progress.QueryError != "" {
 				status = "error"
 			}
+			envStr := string(rw.Env)
 			steps = append(steps, WorkflowStep{
 				ID:       stepID,
 				Type:     "sql_query",
@@ -1049,6 +1094,7 @@ func (m *WorkflowManager) resumeWorkflow(
 				Status:   status,
 				Count:    progress.QueryRows,
 				Error:    progress.QueryError,
+				Env:      envStr,
 			})
 			rw.broadcast(WorkflowEvent{
 				Type: "sql_done",
@@ -1058,6 +1104,7 @@ func (m *WorkflowManager) resumeWorkflow(
 					"sql":      progress.QuerySQL,
 					"rows":     progress.QueryRows,
 					"error":    progress.QueryError,
+					"env":      envStr,
 				},
 			})
 		}
@@ -1085,7 +1132,7 @@ func (m *WorkflowManager) resumeWorkflow(
 		}
 
 		// Also update session content with current progress (preserving existing messages)
-		sessionMessages := buildSessionMessages(rw.ExistingMessages, rw.ID, rw.Question, "", "streaming", steps, state.ExecutedQueries, nil)
+		sessionMessages := buildSessionMessages(rw.ExistingMessages, rw.ID, rw.Question, string(rw.Env), "", "streaming", steps, state.ExecutedQueries, nil)
 		if err := updateSessionContent(ctx, rw.SessionID, sessionMessages); err != nil {
 			slog.Warn("Failed to update session content at checkpoint", "session_id", rw.SessionID, "error", err)
 		}
@@ -1134,7 +1181,7 @@ func (m *WorkflowManager) resumeWorkflow(
 	}
 
 	// Update session content with final answer and status 'complete' (preserving existing messages)
-	finalMessages := buildSessionMessages(rw.ExistingMessages, rw.ID, rw.Question, result.Answer, "complete", finalSteps, result.ExecutedQueries, result.FollowUpQuestions)
+	finalMessages := buildSessionMessages(rw.ExistingMessages, rw.ID, rw.Question, string(rw.Env), result.Answer, "complete", finalSteps, result.ExecutedQueries, result.FollowUpQuestions)
 	if err := updateSessionContent(context.Background(), rw.SessionID, finalMessages); err != nil {
 		slog.Warn("Failed to update session content on completion", "session_id", rw.SessionID, "error", err)
 	}
@@ -1253,6 +1300,7 @@ func buildFinalSteps(steps []WorkflowStep, result *workflow.WorkflowResult) []Wo
 					Rows:     rows,
 					Count:    eq.Result.Count,
 					Error:    step.Error,
+					Env:      step.Env,
 				}
 			} else {
 				finalSteps[i] = step
@@ -1278,6 +1326,7 @@ func buildFinalSteps(steps []WorkflowStep, result *workflow.WorkflowResult) []Wo
 					Rows:     rows,
 					Count:    eq.Result.Count,
 					Error:    step.Error,
+					Env:      step.Env,
 				}
 			} else {
 				finalSteps[i] = step

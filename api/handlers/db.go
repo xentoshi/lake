@@ -8,7 +8,6 @@ import (
 	"time"
 
 	"github.com/malbeclabs/lake/agent/pkg/workflow"
-	"github.com/malbeclabs/lake/api/config"
 	"github.com/malbeclabs/lake/api/metrics"
 )
 
@@ -25,7 +24,7 @@ func (q *DBQuerier) Query(ctx context.Context, sql string) (workflow.QueryResult
 	sql = strings.TrimSuffix(strings.TrimSpace(sql), ";")
 
 	start := time.Now()
-	rows, err := config.DB.Query(ctx, sql)
+	rows, err := envDB(ctx).Query(ctx, sql)
 	duration := time.Since(start)
 	if err != nil {
 		metrics.RecordClickHouseQuery(duration, err)
@@ -130,7 +129,7 @@ func NewDBSchemaFetcher() *DBSchemaFetcher {
 func (f *DBSchemaFetcher) FetchSchema(ctx context.Context) (string, error) {
 	// Fetch columns
 	start := time.Now()
-	rows, err := config.DB.Query(ctx, `
+	rows, err := envDB(ctx).Query(ctx, `
 		SELECT
 			table,
 			name,
@@ -138,8 +137,9 @@ func (f *DBSchemaFetcher) FetchSchema(ctx context.Context) (string, error) {
 		FROM system.columns
 		WHERE database = $1
 		  AND table NOT LIKE 'stg_%'
+		  AND table != '_env_lock'
 		ORDER BY table, position
-	`, config.Database())
+	`, DatabaseForEnvFromContext(ctx))
 	duration := time.Since(start)
 	if err != nil {
 		metrics.RecordClickHouseQuery(duration, err)
@@ -164,7 +164,7 @@ func (f *DBSchemaFetcher) FetchSchema(ctx context.Context) (string, error) {
 
 	// Fetch view definitions
 	start = time.Now()
-	viewRows, err := config.DB.Query(ctx, `
+	viewRows, err := envDB(ctx).Query(ctx, `
 		SELECT
 			name,
 			as_select
@@ -172,7 +172,8 @@ func (f *DBSchemaFetcher) FetchSchema(ctx context.Context) (string, error) {
 		WHERE database = $1
 		  AND engine = 'View'
 		  AND name NOT LIKE 'stg_%'
-	`, config.Database())
+		  AND name != '_env_lock'
+	`, DatabaseForEnvFromContext(ctx))
 	duration = time.Since(start)
 	if err != nil {
 		metrics.RecordClickHouseQuery(duration, err)

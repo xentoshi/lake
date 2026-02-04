@@ -2,6 +2,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { useCallback, useRef, useState, useEffect } from 'react'
 import type { ChatMessage, ProcessingStep, ChatResponse } from '@/lib/api'
 import { useAuth } from '@/contexts/AuthContext'
+import { useEnv } from '@/contexts/EnvContext'
 import {
   listSessionsWithContent,
   getSession,
@@ -120,6 +121,7 @@ export interface ChatStreamState {
 export function useChatStream(sessionId: string | undefined) {
   const queryClient = useQueryClient()
   const { refreshAuth } = useAuth()
+  const { env } = useEnv()
   const abortControllerRef = useRef<AbortController | null>(null)
   const [streamState, setStreamState] = useState<ChatStreamState>({
     isStreaming: false,
@@ -182,6 +184,7 @@ export function useChatStream(sessionId: string | undefined) {
       id: generateMessageId(),
       role: 'user',
       content: message,
+      env,
     }
 
     // Create streaming placeholder
@@ -273,7 +276,7 @@ export function useChatStream(sessionId: string | undefined) {
                   ...prev,
                   processingSteps: prev.processingSteps.map((step, i) =>
                     i === existingIndex
-                      ? { ...step, status: data.error ? 'error' : 'completed', rows: data.rows, error: data.error || undefined }
+                      ? { ...step, status: data.error ? 'error' : 'completed', rows: data.rows, error: data.error || undefined, env: data.env }
                       : step
                   ),
                 }
@@ -289,6 +292,7 @@ export function useChatStream(sessionId: string | undefined) {
                     status: data.error ? 'error' : 'completed',
                     rows: data.rows,
                     error: data.error || undefined,
+                    env: data.env,
                   }],
                 }
               }
@@ -318,7 +322,7 @@ export function useChatStream(sessionId: string | undefined) {
                   ...prev,
                   processingSteps: prev.processingSteps.map((step, i) =>
                     i === existingIndex
-                      ? { ...step, status: data.error ? 'error' : 'completed', rows: data.rows, error: data.error || undefined }
+                      ? { ...step, status: data.error ? 'error' : 'completed', rows: data.rows, error: data.error || undefined, env: data.env }
                       : step
                   ),
                 }
@@ -334,6 +338,7 @@ export function useChatStream(sessionId: string | undefined) {
                     status: data.error ? 'error' : 'completed',
                     rows: data.rows,
                     error: data.error || undefined,
+                    env: data.env,
                   }],
                 }
               }
