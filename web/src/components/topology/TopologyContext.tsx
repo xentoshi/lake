@@ -1,5 +1,5 @@
 /* eslint-disable react-refresh/only-export-components */
-import { createContext, useContext, useState, useCallback, type ReactNode } from 'react'
+import { createContext, useContext, useState, useCallback, useEffect, useRef, type ReactNode } from 'react'
 import { useSearchParams } from 'react-router-dom'
 
 // Topology interaction modes
@@ -80,7 +80,7 @@ export interface TopologyContextValue {
   toggleOverlay: (overlay: keyof OverlayState) => void
 
   // View type (provided by parent)
-  view: 'map' | 'graph'
+  view: 'map' | 'graph' | 'globe'
 
   // Hover state (for cursor-following popover)
   hoveredEntity: { type: SelectionType; id: string; x: number; y: number } | null
@@ -91,21 +91,23 @@ const TopologyContext = createContext<TopologyContextValue | null>(null)
 
 interface TopologyProviderProps {
   children: ReactNode
-  view: 'map' | 'graph'
+  view: 'map' | 'graph' | 'globe'
 }
 
 const DEFAULT_PANEL_WIDTH = 320
 
 // Parse overlays from URL param (comma-separated)
 // If no param, use view-specific defaults
-function parseOverlaysFromUrl(param: string | null, view: 'map' | 'graph'): OverlayState {
+function parseOverlaysFromUrl(param: string | null, view: 'map' | 'graph' | 'globe'): OverlayState {
+  // Globe view defaults to no overlays to preserve the vibrant color scheme
+  const showTypeOverlays = view !== 'globe'
   const defaultState: OverlayState = {
     validators: false,
-    deviceType: true,               // Default device overlay
+    deviceType: showTypeOverlays,   // Default device overlay (except globe)
     stake: false,
     metroClustering: false,
     contributorDevices: false,
-    linkType: true,                 // Default link overlay
+    linkType: showTypeOverlays,     // Default link overlay (except globe)
     bandwidth: false,
     linkHealth: false,
     trafficFlow: false,
@@ -114,8 +116,6 @@ function parseOverlaysFromUrl(param: string | null, view: 'map' | 'graph'): Over
     isisHealth: false,
     multicastTrees: false,
   }
-  // Suppress unused variable warning
-  void view
   if (!param) return defaultState
 
   // If URL has overlays param, parse it (overrides defaults)
@@ -172,6 +172,19 @@ export function TopologyProvider({ children, view }: TopologyProviderProps) {
   const [overlays, setOverlays] = useState<OverlayState>(() =>
     parseOverlaysFromUrl(searchParams.get('overlays'), view)
   )
+
+  // Track previous view to detect view switches
+  const prevViewRef = useRef(view)
+  useEffect(() => {
+    if (prevViewRef.current !== view) {
+      prevViewRef.current = view
+      // Reset to view-specific defaults when switching views,
+      // unless the user has explicitly set overlays in the URL
+      if (!searchParams.get('overlays')) {
+        setOverlays(parseOverlaysFromUrl(null, view))
+      }
+    }
+  }, [view, searchParams])
 
   // Hover state
   const [hoveredEntity, setHoveredEntity] = useState<{ type: SelectionType; id: string; x: number; y: number } | null>(null)

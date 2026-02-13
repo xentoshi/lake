@@ -20,10 +20,13 @@ import {
   ChevronRight,
   Map,
   Network,
+  Globe,
   Building2,
   Server,
   Link2,
   Radio,
+  Play,
+  Pause,
 } from 'lucide-react'
 import { useTopology, type TopologyMode, type PathMode } from './TopologyContext'
 import { useEnv } from '@/contexts/EnvContext'
@@ -33,6 +36,12 @@ interface TopologyControlBarProps {
   onZoomIn?: () => void
   onZoomOut?: () => void
   onReset?: () => void
+  // Globe auto-rotation (globe view only)
+  autoRotating?: boolean
+  onToggleAutoRotate?: () => void
+  // Globe link animation (globe view only)
+  linkAnimating?: boolean
+  onToggleLinkAnimation?: () => void
 }
 
 interface NavItemProps {
@@ -110,6 +119,10 @@ export function TopologyControlBar({
   onZoomIn,
   onZoomOut,
   onReset,
+  autoRotating,
+  onToggleAutoRotate,
+  linkAnimating,
+  onToggleLinkAnimation,
 }: TopologyControlBarProps) {
   const { mode, setMode, pathMode, setPathMode, overlays, toggleOverlay, view, panel, openPanel, closePanel } = useTopology()
   const { features } = useEnv()
@@ -118,7 +131,7 @@ export function TopologyControlBar({
   const [searchParams] = useSearchParams()
 
   // Switch view while preserving selection params
-  const switchView = (targetView: 'map' | 'graph') => {
+  const switchView = (targetView: 'map' | 'graph' | 'globe') => {
     if (view === targetView) return
     const params = searchParams.toString()
     navigate(`/topology/${targetView}${params ? `?${params}` : ''}`)
@@ -233,6 +246,14 @@ export function TopologyControlBar({
               collapsed={collapsed}
             />
           )}
+          <NavItem
+            icon={<Globe className="h-3.5 w-3.5" />}
+            label="Globe view"
+            onClick={() => switchView('globe')}
+            active={view === 'globe'}
+            activeColor="blue"
+            collapsed={collapsed}
+          />
 
           {onZoomIn && (
             <NavItem
@@ -255,6 +276,26 @@ export function TopologyControlBar({
               icon={<Maximize className="h-3.5 w-3.5" />}
               label="Reset view"
               onClick={onReset}
+              collapsed={collapsed}
+            />
+          )}
+          {onToggleAutoRotate && (
+            <NavItem
+              icon={autoRotating ? <Pause className="h-3.5 w-3.5" /> : <Play className="h-3.5 w-3.5" />}
+              label={autoRotating ? 'Pause rotation' : 'Auto-rotate'}
+              onClick={onToggleAutoRotate}
+              active={autoRotating}
+              activeColor="cyan"
+              collapsed={collapsed}
+            />
+          )}
+          {onToggleLinkAnimation && (
+            <NavItem
+              icon={<Activity className="h-3.5 w-3.5" />}
+              label={linkAnimating ? 'Static links' : 'Animate links'}
+              onClick={onToggleLinkAnimation}
+              active={linkAnimating}
+              activeColor="cyan"
               collapsed={collapsed}
             />
           )}
@@ -364,7 +405,7 @@ export function TopologyControlBar({
             collapsed={collapsed}
           />
 
-          {view === 'map' && (
+          {(view === 'map' || view === 'globe') && (
             <NavItem
               icon={<Users className="h-3.5 w-3.5" />}
               label="Validators"
