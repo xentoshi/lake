@@ -8,6 +8,7 @@ import type { LatencyComparison } from '@/lib/api'
 import { ErrorState } from '@/components/ui/error-state'
 import { cn } from '@/lib/utils'
 import { useTheme } from '@/hooks/use-theme'
+import { PageHeader } from '@/components/page-header'
 import { useDelayedLoading } from '@/hooks/use-delayed-loading'
 
 // Parse metro filters from URL
@@ -259,22 +260,22 @@ export function DzVsInternetPage() {
   }
 
   return (
-    <div className="flex-1 flex flex-col bg-background overflow-auto">
+    <div className="flex-1 flex flex-col bg-background overflow-hidden">
       {/* Header */}
-      <div className="px-6 py-4">
-        <div className="flex items-center justify-between">
-          <div className="flex items-center gap-3">
-            <Zap className="h-5 w-5 text-muted-foreground" />
-            <h1 className="text-lg font-semibold">DZ vs Internet</h1>
-          </div>
-          <button
-            onClick={handleExport}
-            className="flex items-center gap-2 px-3 py-1.5 text-sm bg-muted hover:bg-muted/80 rounded-md transition-colors"
-          >
-            <Download className="h-4 w-4" />
-            Export CSV
-          </button>
-        </div>
+      <div className="px-6 py-4 flex-shrink-0">
+        <PageHeader
+          icon={Zap}
+          title="DZ vs Internet"
+          actions={
+            <button
+              onClick={handleExport}
+              className="flex items-center gap-2 px-3 py-1.5 text-sm border border-border bg-background hover:bg-muted/50 rounded-md transition-colors"
+            >
+              <Download className="h-4 w-4" />
+              Export CSV
+            </button>
+          }
+        />
 
         <p className="mt-3 text-sm text-muted-foreground">
           Compares measured latency on direct DZ links against public internet latency for the same metro pairs.
@@ -338,9 +339,9 @@ export function DzVsInternetPage() {
         </div>
       </div>
 
-      {/* Table */}
-      <div className="px-6">
-        <div className="flex border-x border-border">
+      {/* Table + Detail */}
+      <div className="flex-1 flex px-6 min-h-0">
+        <div className="flex-1 overflow-auto min-w-0">
           <table className="w-full">
             <thead className="sticky top-0 bg-muted z-10">
               <tr>
@@ -427,7 +428,7 @@ export function DzVsInternetPage() {
                   <tr
                     key={`${comp.origin_metro_pk}-${comp.target_metro_pk}`}
                     className={cn(
-                      'hover:bg-muted/50 cursor-pointer transition-colors',
+                      'hover:bg-muted cursor-pointer transition-colors',
                       isSelected && 'bg-muted/50'
                     )}
                     onClick={() => setSelectedComparison(isSelected ? null : comp)}
@@ -494,10 +495,11 @@ export function DzVsInternetPage() {
               })}
             </tbody>
           </table>
+        </div>
 
-          {/* Detail panel */}
-          {selectedComparison && (
-            <div className="w-96 flex-shrink-0 border-l border-border p-4 bg-card overflow-y-auto">
+        {/* Detail panel */}
+        {selectedComparison && (
+          <div className="w-96 flex-shrink-0 border-l border-border p-4 bg-card overflow-y-auto">
               <div className="flex items-center justify-between mb-4">
                 <h3 className="font-medium flex items-center gap-2">
                   <span>{selectedComparison.origin_metro_code}</span>
@@ -506,9 +508,9 @@ export function DzVsInternetPage() {
                 </h3>
                 <button
                   onClick={() => setSelectedComparison(null)}
-                  className="text-muted-foreground hover:text-foreground text-sm"
+                  className="text-muted-foreground hover:text-foreground"
                 >
-                  Close
+                  <X className="h-4 w-4" />
                 </button>
               </div>
 
@@ -738,13 +740,12 @@ export function DzVsInternetPage() {
                 DZ samples: {selectedComparison.dz_sample_count.toLocaleString()} •
                 Internet samples: {selectedComparison.internet_sample_count.toLocaleString()}
               </div>
-            </div>
-          )}
-        </div>
+          </div>
+        )}
       </div>
 
       {/* Legend */}
-      <div className="px-6 py-4 flex items-center gap-6 text-xs text-muted-foreground">
+      <div className="px-6 py-4 flex-shrink-0 flex items-center gap-6 text-xs text-muted-foreground">
         <span className="font-medium">Legend:</span>
         <div className="flex items-center gap-2">
           <div className="w-4 h-4 rounded bg-green-100 dark:bg-green-900/40 border border-green-200 dark:border-green-800" />

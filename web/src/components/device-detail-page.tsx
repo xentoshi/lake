@@ -3,6 +3,7 @@ import { useQuery } from '@tanstack/react-query'
 import { Loader2, Server, AlertCircle, ArrowLeft } from 'lucide-react'
 import { fetchDevice } from '@/lib/api'
 import { DeviceInfoContent } from '@/components/shared/DeviceInfoContent'
+import { useDocumentTitle } from '@/hooks/use-document-title'
 import { deviceDetailToInfo } from '@/components/shared/device-info-converters'
 import { SingleDeviceStatusRow } from '@/components/single-device-status-row'
 
@@ -16,7 +17,7 @@ function formatBps(bps: number): string {
 }
 
 const statusColors: Record<string, string> = {
-  activated: 'text-green-600 dark:text-green-400',
+  activated: 'text-muted-foreground',
   provisioning: 'text-blue-600 dark:text-blue-400',
   maintenance: 'text-amber-600 dark:text-amber-400',
   offline: 'text-red-600 dark:text-red-400',
@@ -31,6 +32,8 @@ export function DeviceDetailPage() {
     queryFn: () => fetchDevice(pk!),
     enabled: !!pk,
   })
+
+  useDocumentTitle(device?.code || 'Device')
 
   if (isLoading) {
     return (

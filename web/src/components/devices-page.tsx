@@ -6,11 +6,12 @@ import { fetchAllPaginated, fetchDevices } from '@/lib/api'
 import { handleRowClick } from '@/lib/utils'
 import { Pagination } from './pagination'
 import { InlineFilter } from './inline-filter'
+import { PageHeader } from './page-header'
 
 const PAGE_SIZE = 100
 
 const statusColors: Record<string, string> = {
-  activated: 'text-green-600 dark:text-green-400',
+  activated: 'text-muted-foreground',
   provisioning: 'text-blue-600 dark:text-blue-400',
   'soft-drained': 'text-amber-600 dark:text-amber-400',
   drained: 'text-amber-600 dark:text-amber-400',
@@ -251,8 +252,19 @@ export function DevicesPage() {
       return getSearchValue(device, searchField).toLowerCase().includes(needle)
     }
 
-    // Apply all filters (AND logic - device must match all filters)
-    return devices.filter(device => allFilters.every(f => matchesSingleFilter(device, f)))
+    // Group filters by field, then OR within same field, AND across different fields
+    const grouped = new Map<string, string[]>()
+    for (const f of allFilters) {
+      const { field } = parseFilter(f)
+      const existing = grouped.get(field) ?? []
+      existing.push(f)
+      grouped.set(field, existing)
+    }
+    return devices.filter(device =>
+      Array.from(grouped.values()).every(group =>
+        group.some(f => matchesSingleFilter(device, f))
+      )
+    )
   }, [devices, allFilters])
   const sortedDevices = useMemo(() => {
     if (!filteredDevices) return []
@@ -357,46 +369,40 @@ export function DevicesPage() {
   return (
     <div className="flex-1 overflow-auto">
       <div className="max-w-[1600px] mx-auto px-4 sm:px-8 py-8">
-        {/* Header */}
-        <div className="flex flex-wrap items-center justify-between gap-3 mb-6">
-          <div className="flex items-center gap-3">
-            <Server className="h-6 w-6 text-muted-foreground" />
-            <h1 className="text-2xl font-medium">Devices</h1>
-            <span className="text-muted-foreground">({response?.total || 0})</span>
-          </div>
-          <div className="flex items-center gap-2 flex-wrap">
-            {/* Filter tags */}
-            {searchFilters.map((filter, idx) => (
-              <button
-                key={`${filter}-${idx}`}
-                onClick={() => removeFilter(filter)}
-                className="inline-flex items-center gap-1 text-xs px-2 py-1 rounded-md bg-blue-500/10 text-blue-600 dark:text-blue-400 border border-blue-500/20 hover:bg-blue-500/20 transition-colors"
-              >
-                {filter}
-                <X className="h-3 w-3" />
-              </button>
-            ))}
-
-            {/* Clear all */}
-            {searchFilters.length > 1 && (
-              <button
-                onClick={clearAllFilters}
-                className="text-xs text-muted-foreground hover:text-foreground transition-colors"
-              >
-                Clear all
-              </button>
-            )}
-
-            {/* Inline filter */}
-            <InlineFilter
-              fieldPrefixes={deviceFieldPrefixes}
-              entity="devices"
-              autocompleteFields={deviceAutocompleteFields}
-              placeholder="Filter devices..."
-              onLiveFilterChange={setLiveFilter}
-            />
-          </div>
-        </div>
+        <PageHeader
+          icon={Server}
+          title="Devices"
+          count={response?.total || 0}
+          actions={
+            <>
+              {searchFilters.map((filter, idx) => (
+                <button
+                  key={`${filter}-${idx}`}
+                  onClick={() => removeFilter(filter)}
+                  className="inline-flex items-center gap-1 text-xs px-2 py-1 rounded-md bg-blue-500/10 text-blue-600 dark:text-blue-400 border border-blue-500/20 hover:bg-blue-500/20 transition-colors"
+                >
+                  {filter}
+                  <X className="h-3 w-3" />
+                </button>
+              ))}
+              {searchFilters.length > 1 && (
+                <button
+                  onClick={clearAllFilters}
+                  className="text-xs text-muted-foreground hover:text-foreground transition-colors"
+                >
+                  Clear all
+                </button>
+              )}
+              <InlineFilter
+                fieldPrefixes={deviceFieldPrefixes}
+                entity="devices"
+                autocompleteFields={deviceAutocompleteFields}
+                placeholder="Filter devices..."
+                onLiveFilterChange={setLiveFilter}
+              />
+            </>
+          }
+        />
 
         {/* Table */}
         <div className="border border-border rounded-lg overflow-hidden bg-card">
@@ -470,7 +476,7 @@ export function DevicesPage() {
                 {pagedDevices.map((device) => (
                   <tr
                     key={device.pk}
-                    className="border-b border-border last:border-b-0 hover:bg-muted/50 cursor-pointer transition-colors"
+                    className="border-b border-border last:border-b-0 hover:bg-muted cursor-pointer transition-colors"
                     onClick={(e) => handleRowClick(e, `/dz/devices/${device.pk}`, navigate)}
                   >
                     <td className="px-4 py-3">

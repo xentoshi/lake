@@ -2,6 +2,7 @@ import { useParams, useNavigate, Link } from 'react-router-dom'
 import { useQuery } from '@tanstack/react-query'
 import { Loader2, Users, AlertCircle, ArrowLeft, Check } from 'lucide-react'
 import { fetchUser } from '@/lib/api'
+import { useDocumentTitle } from '@/hooks/use-document-title'
 
 function formatBps(bps: number): string {
   if (bps === 0) return '—'
@@ -20,7 +21,7 @@ function formatStake(sol: number): string {
 }
 
 const statusColors: Record<string, string> = {
-  activated: 'text-green-600 dark:text-green-400',
+  activated: 'text-muted-foreground',
   provisioning: 'text-blue-600 dark:text-blue-400',
   'soft-drained': 'text-amber-600 dark:text-amber-400',
   drained: 'text-amber-600 dark:text-amber-400',
@@ -37,6 +38,8 @@ export function UserDetailPage() {
     queryFn: () => fetchUser(pk!),
     enabled: !!pk,
   })
+
+  useDocumentTitle(user?.owner_pubkey ? `${user.owner_pubkey.slice(0, 8)}...${user.owner_pubkey.slice(-4)}` : 'User')
 
   if (isLoading) {
     return (
