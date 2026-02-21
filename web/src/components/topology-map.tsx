@@ -437,6 +437,37 @@ export function TopologyMap({ metros, devices, links, validators }: TopologyMapP
     })
   }, [])
 
+  // Handler to select/deselect all publishers
+  const handleSetAllPublishers = useCallback((enabled: boolean) => {
+    if (!selectedMulticastGroup) return
+    const detail = multicastGroupDetails.get(selectedMulticastGroup)
+    if (!detail?.members) return
+    if (enabled) {
+      const pubs = new Set<string>()
+      detail.members.forEach(m => {
+        if (m.mode === 'P' || m.mode === 'P+S') pubs.add(m.device_pk)
+      })
+      setEnabledPublishers(pubs)
+    } else {
+      setEnabledPublishers(new Set())
+    }
+  }, [selectedMulticastGroup, multicastGroupDetails])
+
+  // Handler to select/deselect all subscribers
+  const handleSetAllSubscribers = useCallback((enabled: boolean) => {
+    if (!selectedMulticastGroup) return
+    const detail = multicastGroupDetails.get(selectedMulticastGroup)
+    if (!detail?.members) return
+    if (enabled) {
+      const subs = new Set<string>()
+      detail.members.forEach(m => {
+        if (m.mode === 'S' || m.mode === 'P+S') subs.add(m.device_pk)
+      })
+      setEnabledSubscribers(subs)
+    } else {
+      setEnabledSubscribers(new Set())
+    }
+  }, [selectedMulticastGroup, multicastGroupDetails])
 
   // Fetch multicast tree paths when group is selected
   useEffect(() => {
@@ -452,15 +483,20 @@ export function TopologyMap({ metros, devices, links, validators }: TopologyMapP
       .catch(err => console.error(`Failed to fetch multicast tree paths for ${code}:`, err))
   }, [multicastTreesMode, selectedMulticastGroup, multicastTreePaths])
 
-  // Auto-load group details when group is selected
+  // Auto-load group details when group is selected, and refresh periodically
+  // to keep leader schedule timing accurate
   useEffect(() => {
     if (!multicastTreesMode || !selectedMulticastGroup) return
-    if (multicastGroupDetails.has(selectedMulticastGroup)) return
     const code = selectedMulticastGroup
-    fetchMulticastGroup(code)
-      .then(detail => setMulticastGroupDetails(prev => new Map(prev).set(code, detail)))
-      .catch(err => console.error('Failed to fetch multicast group:', err))
-  }, [multicastTreesMode, selectedMulticastGroup, multicastGroupDetails])
+    const load = () => {
+      fetchMulticastGroup(code)
+        .then(detail => setMulticastGroupDetails(prev => new Map(prev).set(code, detail)))
+        .catch(err => console.error('Failed to fetch multicast group:', err))
+    }
+    if (!multicastGroupDetails.has(code)) load()
+    const interval = setInterval(load, 30000)
+    return () => clearInterval(interval)
+  }, [multicastTreesMode, selectedMulticastGroup]) // eslint-disable-line react-hooks/exhaustive-deps
 
   // Set enabled publishers/subscribers when group details are loaded
   useEffect(() => {
@@ -3773,6 +3809,8 @@ export function TopologyMap({ metros, devices, links, validators }: TopologyMapP
               enabledSubscribers={enabledSubscribers}
               onTogglePublisher={handleTogglePublisher}
               onToggleSubscriber={handleToggleSubscriber}
+              onSetAllPublishers={handleSetAllPublishers}
+              onSetAllSubscribers={handleSetAllSubscribers}
               publisherColorMap={multicastPublisherColorMap}
               dimOtherLinks={dimOtherLinks}
               onToggleDimOtherLinks={() => setDimOtherLinks(prev => !prev)}

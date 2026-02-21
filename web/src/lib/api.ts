@@ -1198,6 +1198,7 @@ export interface LinkIssue {
   side_a_metro: string
   side_z_metro: string
   since: string
+  is_down: boolean
 }
 
 export interface LinkMetric {
@@ -1797,6 +1798,16 @@ export interface MulticastMember {
   dz_ip: string
   status: string
   owner_pubkey: string
+  tunnel_id: number
+  traffic_bps: number
+  traffic_pps: number
+  is_leader: boolean
+  node_pubkey: string
+  vote_pubkey: string
+  stake_sol: number
+  last_leader_slot: number | null
+  next_leader_slot: number | null
+  current_slot: number
 }
 
 export interface MulticastGroupDetail extends MulticastGroupListItem {
@@ -1811,8 +1822,8 @@ export async function fetchMulticastGroups(): Promise<MulticastGroupListItem[]> 
   return res.json()
 }
 
-export async function fetchMulticastGroup(code: string): Promise<MulticastGroupDetail> {
-  const res = await apiFetch(`/api/dz/multicast-groups/${encodeURIComponent(code)}`)
+export async function fetchMulticastGroup(pkOrCode: string): Promise<MulticastGroupDetail> {
+  const res = await apiFetch(`/api/dz/multicast-groups/${encodeURIComponent(pkOrCode)}`)
   if (!res.ok) {
     throw new Error('Failed to fetch multicast group')
   }
@@ -1846,10 +1857,34 @@ export interface MulticastTreeResponse {
   error?: string
 }
 
-export async function fetchMulticastTreePaths(code: string): Promise<MulticastTreeResponse> {
-  const res = await apiFetch(`/api/dz/multicast-groups/${encodeURIComponent(code)}/tree-paths`)
+export async function fetchMulticastTreePaths(pkOrCode: string): Promise<MulticastTreeResponse> {
+  const res = await apiFetch(`/api/dz/multicast-groups/${encodeURIComponent(pkOrCode)}/tree-paths`)
   if (!res.ok) {
     throw new Error('Failed to fetch multicast tree paths')
+  }
+  return res.json()
+}
+
+// Multicast group traffic types
+export interface MulticastTrafficPoint {
+  time: string
+  device_pk: string
+  tunnel_id: number
+  mode: string
+  in_bps: number
+  out_bps: number
+  in_pps: number
+  out_pps: number
+}
+
+export async function fetchMulticastGroupTraffic(pkOrCode: string, timeRange?: string, bucket?: string): Promise<MulticastTrafficPoint[]> {
+  const params = new URLSearchParams()
+  if (timeRange) params.set('time_range', timeRange)
+  if (bucket && bucket !== 'auto') params.set('bucket', bucket)
+  const qs = params.toString()
+  const res = await apiFetch(`/api/dz/multicast-groups/${encodeURIComponent(pkOrCode)}/traffic${qs ? `?${qs}` : ''}`)
+  if (!res.ok) {
+    throw new Error('Failed to fetch multicast group traffic')
   }
   return res.json()
 }
@@ -2716,6 +2751,7 @@ export interface User {
   status: string
   kind: string
   dz_ip: string
+  client_ip: string
   device_pk: string
   device_code: string
   metro_code: string
@@ -2733,18 +2769,40 @@ export async function fetchUsers(limit = 100, offset = 0): Promise<PaginatedResp
 }
 
 export interface UserDetail extends User {
+  client_ip: string
+  tunnel_id: number
   metro_pk: string
   contributor_pk: string
   contributor_code: string
   is_validator: boolean
+  node_pubkey: string
   vote_pubkey: string
   stake_sol: number
+  stake_weight_pct: number
 }
 
 export async function fetchUser(pk: string): Promise<UserDetail> {
   const res = await fetchWithRetry(`/api/dz/users/${encodeURIComponent(pk)}`)
   if (!res.ok) {
     throw new Error('Failed to fetch user')
+  }
+  return res.json()
+}
+
+export interface UserMulticastGroup {
+  group_pk: string
+  group_code: string
+  multicast_ip: string
+  mode: 'P' | 'S' | 'P+S'
+  status: string
+  publisher_count: number
+  subscriber_count: number
+}
+
+export async function fetchUserMulticastGroups(pk: string): Promise<UserMulticastGroup[]> {
+  const res = await fetchWithRetry(`/api/dz/users/${encodeURIComponent(pk)}/multicast-groups`)
+  if (!res.ok) {
+    throw new Error('Failed to fetch user multicast groups')
   }
   return res.json()
 }
@@ -2805,6 +2863,28 @@ export async function fetchValidator(votePubkey: string): Promise<ValidatorDetai
   const res = await fetchWithRetry(`/api/solana/validators/${encodeURIComponent(votePubkey)}`)
   if (!res.ok) {
     throw new Error('Failed to fetch validator')
+  }
+  return res.json()
+}
+
+// User traffic types
+export interface UserTrafficPoint {
+  time: string
+  tunnel_id: number
+  in_bps: number
+  out_bps: number
+  in_pps: number
+  out_pps: number
+}
+
+export async function fetchUserTraffic(pk: string, timeRange?: string, bucket?: string): Promise<UserTrafficPoint[]> {
+  const params = new URLSearchParams()
+  if (timeRange) params.set('time_range', timeRange)
+  if (bucket && bucket !== 'auto') params.set('bucket', bucket)
+  const qs = params.toString()
+  const res = await apiFetch(`/api/dz/users/${encodeURIComponent(pk)}/traffic${qs ? `?${qs}` : ''}`)
+  if (!res.ok) {
+    throw new Error('Failed to fetch user traffic')
   }
   return res.json()
 }
