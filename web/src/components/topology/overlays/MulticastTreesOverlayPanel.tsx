@@ -1,6 +1,6 @@
-import { useState, useEffect, useMemo } from 'react'
+import { useState, useEffect, useMemo, useCallback } from 'react'
 import { useQuery } from '@tanstack/react-query'
-import { Radio, X, ChevronDown, ChevronRight, Settings2, User, Server, BarChart3 } from 'lucide-react'
+import { Radio, X, ChevronDown, ChevronRight, Settings2, User, Server, BarChart3, Info } from 'lucide-react'
 import { LineChart, Line, XAxis, YAxis, ResponsiveContainer, Tooltip as RechartsTooltip, CartesianGrid, ReferenceLine } from 'recharts'
 import { useTopology } from '../TopologyContext'
 import { EntityLink } from '../EntityLink'
@@ -17,14 +17,14 @@ import {
 // Colors for multicast publishers — exported so map/globe/graph views use the same palette
 // eslint-disable-next-line react-refresh/only-export-components
 export const MULTICAST_PUBLISHER_COLORS = [
-  { light: '#9333ea', dark: '#a855f7' },  // purple
-  { light: '#2563eb', dark: '#3b82f6' },  // blue
-  { light: '#16a34a', dark: '#22c55e' },  // green
-  { light: '#ea580c', dark: '#f97316' },  // orange
-  { light: '#0891b2', dark: '#06b6d4' },  // cyan
-  { light: '#dc2626', dark: '#ef4444' },  // red
-  { light: '#ca8a04', dark: '#eab308' },  // yellow
-  { light: '#db2777', dark: '#ec4899' },  // pink
+  { light: '#7c5cbf', dark: '#a78bda' },  // soft purple
+  { light: '#4a8fe7', dark: '#6ba8f2' },  // soft blue
+  { light: '#3dad6f', dark: '#5ec98d' },  // soft green
+  { light: '#d4854a', dark: '#e8a06e' },  // soft orange
+  { light: '#2ba3a8', dark: '#4fc5ca' },  // soft teal
+  { light: '#d46a7e', dark: '#e88d9e' },  // soft rose
+  { light: '#c4a23d', dark: '#dbbe5c' },  // soft gold
+  { light: '#c45fa0', dark: '#da82b8' },  // soft magenta
 ]
 
 interface MulticastTreesOverlayPanelProps {
@@ -33,12 +33,10 @@ interface MulticastTreesOverlayPanelProps {
   onSelectGroup: (code: string | null) => void
   groupDetails: Map<string, MulticastGroupDetail>  // Cached group details
   // Publisher/subscriber filtering
-  enabledPublishers: Set<string>  // device PKs of enabled publishers
-  enabledSubscribers: Set<string>  // device PKs of enabled subscribers
-  onTogglePublisher: (devicePK: string) => void
-  onToggleSubscriber: (devicePK: string) => void
-  onSetAllPublishers: (enabled: boolean) => void
-  onSetAllSubscribers: (enabled: boolean) => void
+  enabledPublishers: Set<string>  // user PKs of enabled publishers
+  enabledSubscribers: Set<string>  // user PKs of enabled subscribers
+  onSetEnabledPublishers: (updater: Set<string> | ((prev: Set<string>) => Set<string>)) => void
+  onSetEnabledSubscribers: (updater: Set<string> | ((prev: Set<string>) => Set<string>)) => void
   // Publisher color map for consistent colors
   publisherColorMap: Map<string, number>
   // Dim other links toggle
@@ -51,6 +49,8 @@ interface MulticastTreesOverlayPanelProps {
   validators: TopologyValidator[]
   showTreeValidators: boolean
   onToggleShowTreeValidators: () => void
+  // Hover coordination with map/globe/graph
+  onHoverMember: (devicePK: string | null) => void
 }
 
 function Toggle({ enabled, onToggle }: { enabled: boolean; onToggle: () => void }) {
@@ -67,6 +67,21 @@ function Toggle({ enabled, onToggle }: { enabled: boolean; onToggle: () => void 
         }`}
       />
     </button>
+  )
+}
+
+function SelectionHint() {
+  return (
+    <div className="relative group flex-shrink-0">
+      <Info className="h-3 w-3 text-muted-foreground/50 group-hover:text-muted-foreground cursor-help" />
+      <div className="absolute left-1/2 -translate-x-1/2 bottom-full mb-1 hidden group-hover:block z-50 pointer-events-none">
+        <div className="bg-[var(--popover)] text-[var(--popover-foreground)] border border-[var(--border)] rounded-md px-2 py-1.5 text-[10px] leading-relaxed whitespace-nowrap shadow-md">
+          <div><strong>Click</strong> — solo select</div>
+          <div><strong>{navigator.platform.includes('Mac') ? 'Cmd' : 'Ctrl'}+click</strong> — toggle</div>
+          <div><strong>Shift+click</strong> — range select</div>
+        </div>
+      </div>
+    </div>
   )
 }
 
@@ -105,29 +120,30 @@ function leaderTimingText(member: MulticastMember): string | null {
 interface MemberRowProps {
   member: MulticastMember
   isEnabled: boolean
-  onToggle: () => void
-  colorDot: React.ReactNode
+  isHovered: boolean
+  onClick: (e: React.MouseEvent) => void
+  onMouseEnter: () => void
+  onMouseLeave: () => void
+  accentColor: string
 }
 
-function MemberRow({ member, isEnabled, onToggle, colorDot }: MemberRowProps) {
+function MemberRow({ member, isEnabled, isHovered, onClick, onMouseEnter, onMouseLeave, accentColor }: MemberRowProps) {
   const isValidator = !!member.node_pubkey
   return (
     <div
-      className={`py-1.5 px-2 cursor-pointer rounded-md bg-[var(--muted)]/50 transition-opacity ${!isEnabled ? 'opacity-40' : ''}`}
+      className={`py-1.5 pr-2 pl-1.5 cursor-pointer rounded-md transition-all select-none border-l-2 ${
+        isHovered ? 'bg-[var(--muted)]' : 'bg-[var(--muted)]/50'
+      } ${!isEnabled ? 'opacity-55' : ''}`}
+      style={{ borderLeftColor: isEnabled ? accentColor : 'transparent' }}
       onClick={(e) => {
         // Don't toggle when clicking a link
         if ((e.target as HTMLElement).closest('a')) return
-        onToggle()
+        onClick(e)
       }}
+      onMouseEnter={onMouseEnter}
+      onMouseLeave={onMouseLeave}
     >
       <div className="flex items-center gap-1.5">
-        <input
-          type="checkbox"
-          checked={isEnabled}
-          onChange={() => {}}
-          className="h-2.5 w-2.5 rounded border-[var(--border)] flex-shrink-0"
-        />
-        {colorDot}
         {isValidator ? (
           <Server className="h-3 w-3 text-muted-foreground flex-shrink-0" />
         ) : (
@@ -154,7 +170,7 @@ function MemberRow({ member, isEnabled, onToggle, colorDot }: MemberRowProps) {
         </div>
       </div>
       {(member.device_code || member.is_leader || leaderTimingText(member)) && (
-        <div className="flex items-center gap-1.5 ml-6 mt-0.5 text-[10px] text-muted-foreground">
+        <div className="flex items-center gap-1.5 ml-4.5 mt-0.5 text-[10px] text-muted-foreground">
           {(() => {
             const timing = leaderTimingText(member)
             return timing ? <span className={member.is_leader ? 'text-amber-500' : ''}>{timing}</span> : null
@@ -181,10 +197,8 @@ export function MulticastTreesOverlayPanel({
   groupDetails,
   enabledPublishers,
   enabledSubscribers,
-  onTogglePublisher,
-  onToggleSubscriber,
-  onSetAllPublishers,
-  onSetAllSubscribers,
+  onSetEnabledPublishers,
+  onSetEnabledSubscribers,
   publisherColorMap,
   dimOtherLinks,
   onToggleDimOtherLinks,
@@ -193,6 +207,7 @@ export function MulticastTreesOverlayPanel({
   validators: _validators, // eslint-disable-line @typescript-eslint/no-unused-vars
   showTreeValidators,
   onToggleShowTreeValidators,
+  onHoverMember,
 }: MulticastTreesOverlayPanelProps) {
   const { toggleOverlay } = useTopology()
   const [groups, setGroups] = useState<MulticastGroupListItem[]>([])
@@ -202,6 +217,13 @@ export function MulticastTreesOverlayPanel({
   const [groupsOpen, setGroupsOpen] = useState(true)
   const [membersOpen, setMembersOpen] = useState(true)
   const [optionsOpen, setOptionsOpen] = useState(true)
+
+  // Hover state: which user_pk is hovered in the member list (or from traffic chart)
+  const [hoveredUserPK, setHoveredUserPK] = useState<string | null>(null)
+
+  // Click state for solo/cmd/shift selection
+  const [lastClickedPubIndex, setLastClickedPubIndex] = useState<number | null>(null)
+  const [lastClickedSubIndex, setLastClickedSubIndex] = useState<number | null>(null)
 
   // Fetch groups on mount
   useEffect(() => {
@@ -256,9 +278,109 @@ export function MulticastTreesOverlayPanel({
   const publishersByMetro = useMemo(() => groupByMetro(publishers), [publishers])
   const subscribersByMetro = useMemo(() => groupByMetro(subscribers), [subscribers])
 
-  // Check if all are enabled for select/deselect all
-  const allPublishersEnabled = publishers.length > 0 && publishers.every(m => enabledPublishers.has(m.device_pk))
-  const allSubscribersEnabled = subscribers.length > 0 && subscribers.every(m => enabledSubscribers.has(m.device_pk))
+  // Build ordered user_pk arrays from metro-grouped render order (for shift-click range selection)
+  const orderedPublisherUserPKs = useMemo(() =>
+    publishersByMetro.flatMap(([, members]) => members.map(m => m.user_pk)),
+    [publishersByMetro]
+  )
+  const orderedSubscriberUserPKs = useMemo(() =>
+    subscribersByMetro.flatMap(([, members]) => members.map(m => m.user_pk)),
+    [subscribersByMetro]
+  )
+
+  // Build userPK -> devicePK lookup
+  const userPKToDevicePK = useMemo(() => {
+    const map = new Map<string, string>()
+    if (selectedDetail?.members) {
+      for (const m of selectedDetail.members) {
+        if (!map.has(m.user_pk)) map.set(m.user_pk, m.device_pk)
+      }
+    }
+    return map
+  }, [selectedDetail])
+
+  // When hoveredUserPK changes, derive devicePK and call onHoverMember
+  useEffect(() => {
+    if (!hoveredUserPK) {
+      onHoverMember(null)
+      return
+    }
+    const devicePK = userPKToDevicePK.get(hoveredUserPK) ?? null
+    onHoverMember(devicePK)
+  }, [hoveredUserPK, userPKToDevicePK, onHoverMember])
+
+  // Derive tunnelId from hoveredUserPK for traffic chart coordination
+  const hoveredTunnelId = useMemo(() => {
+    if (!hoveredUserPK || !selectedDetail?.members) return null
+    const member = selectedDetail.members.find(m => m.user_pk === hoveredUserPK && m.tunnel_id > 0)
+    return member?.tunnel_id ?? null
+  }, [hoveredUserPK, selectedDetail])
+
+  // Solo/cmd/shift click handler for publishers
+  const handlePublisherClick = useCallback((userPK: string, index: number, event: React.MouseEvent) => {
+    if (event.shiftKey && lastClickedPubIndex !== null) {
+      const start = Math.min(lastClickedPubIndex, index)
+      const end = Math.max(lastClickedPubIndex, index)
+      onSetEnabledPublishers(prev => {
+        const next = new Set(prev)
+        for (let i = start; i <= end; i++) {
+          next.add(orderedPublisherUserPKs[i])
+        }
+        return next
+      })
+    } else if (event.ctrlKey || event.metaKey) {
+      onSetEnabledPublishers(prev => {
+        const next = new Set(prev)
+        if (next.has(userPK)) next.delete(userPK)
+        else next.add(userPK)
+        return next
+      })
+    } else {
+      // Solo click: if already solo-selected, show all; otherwise solo-select
+      const isSolo = enabledPublishers.size === 1 && enabledPublishers.has(userPK)
+      if (isSolo) {
+        onSetEnabledPublishers(new Set(publishers.map(m => m.user_pk)))
+      } else {
+        onSetEnabledPublishers(new Set([userPK]))
+      }
+    }
+    setLastClickedPubIndex(index)
+  }, [lastClickedPubIndex, orderedPublisherUserPKs, enabledPublishers, publishers, onSetEnabledPublishers])
+
+  // Solo/cmd/shift click handler for subscribers
+  const handleSubscriberClick = useCallback((userPK: string, index: number, event: React.MouseEvent) => {
+    if (event.shiftKey && lastClickedSubIndex !== null) {
+      const start = Math.min(lastClickedSubIndex, index)
+      const end = Math.max(lastClickedSubIndex, index)
+      onSetEnabledSubscribers(prev => {
+        const next = new Set(prev)
+        for (let i = start; i <= end; i++) {
+          next.add(orderedSubscriberUserPKs[i])
+        }
+        return next
+      })
+    } else if (event.ctrlKey || event.metaKey) {
+      onSetEnabledSubscribers(prev => {
+        const next = new Set(prev)
+        if (next.has(userPK)) next.delete(userPK)
+        else next.add(userPK)
+        return next
+      })
+    } else {
+      const isSolo = enabledSubscribers.size === 1 && enabledSubscribers.has(userPK)
+      if (isSolo) {
+        onSetEnabledSubscribers(new Set(subscribers.map(m => m.user_pk)))
+      } else {
+        onSetEnabledSubscribers(new Set([userPK]))
+      }
+    }
+    setLastClickedSubIndex(index)
+  }, [lastClickedSubIndex, orderedSubscriberUserPKs, enabledSubscribers, subscribers, onSetEnabledSubscribers])
+
+  // Callback for traffic chart legend hover -> set hoveredUserPK
+  const handleTrafficChartHoverUserPK = useCallback((userPK: string | null) => {
+    setHoveredUserPK(userPK)
+  }, [])
 
   return (
     <div className="p-3 text-xs">
@@ -390,12 +512,22 @@ export function MulticastTreesOverlayPanel({
                         {activeTab === 'publishers' && (
                           <div className="space-y-2">
                             {publishers.length > 1 && (
-                              <button
-                                onClick={() => onSetAllPublishers(!allPublishersEnabled)}
-                                className="text-[10px] text-muted-foreground hover:text-foreground transition-colors"
-                              >
-                                {allPublishersEnabled ? 'Deselect all' : 'Select all'}
-                              </button>
+                              <div className="flex items-center gap-1.5 text-[10px] text-muted-foreground">
+                                <button
+                                  onClick={() => onSetEnabledPublishers(new Set(publishers.map(m => m.user_pk)))}
+                                  className="hover:text-foreground transition-colors"
+                                >
+                                  all
+                                </button>
+                                {' / '}
+                                <button
+                                  onClick={() => onSetEnabledPublishers(new Set())}
+                                  className="hover:text-foreground transition-colors"
+                                >
+                                  none
+                                </button>
+                                <SelectionHint />
+                              </div>
                             )}
                             {publishers.length === 0 && (
                               <div className="text-muted-foreground text-[10px] py-2">No publishers</div>
@@ -407,19 +539,17 @@ export function MulticastTreesOverlayPanel({
                                 members={members}
 
                                 enabledMembers={enabledPublishers}
-                                onToggleMember={onTogglePublisher}
+                                onMemberClick={handlePublisherClick}
+                                orderedUserPKs={orderedPublisherUserPKs}
+
+                                hoveredUserPK={hoveredUserPK}
+                                onHoverUserPK={setHoveredUserPK}
 
                                 keySuffix="-pub"
-                                colorDotForMember={(m) => {
+                                accentColorForMember={(m) => {
                                   const pubColorIndex = publisherColorMap.get(m.device_pk) ?? 0
                                   const pubColor = MULTICAST_PUBLISHER_COLORS[pubColorIndex % MULTICAST_PUBLISHER_COLORS.length]
-                                  const colorStyle = isDark ? pubColor.dark : pubColor.light
-                                  return (
-                                    <div
-                                      className="w-3 h-3 rounded-full flex-shrink-0"
-                                      style={{ backgroundColor: colorStyle }}
-                                    />
-                                  )
+                                  return isDark ? pubColor.dark : pubColor.light
                                 }}
                               />
                             ))}
@@ -430,12 +560,22 @@ export function MulticastTreesOverlayPanel({
                         {activeTab === 'subscribers' && (
                           <div className="space-y-2">
                             {subscribers.length > 1 && (
-                              <button
-                                onClick={() => onSetAllSubscribers(!allSubscribersEnabled)}
-                                className="text-[10px] text-muted-foreground hover:text-foreground transition-colors"
-                              >
-                                {allSubscribersEnabled ? 'Deselect all' : 'Select all'}
-                              </button>
+                              <div className="flex items-center gap-1.5 text-[10px] text-muted-foreground">
+                                <button
+                                  onClick={() => onSetEnabledSubscribers(new Set(subscribers.map(m => m.user_pk)))}
+                                  className="hover:text-foreground transition-colors"
+                                >
+                                  all
+                                </button>
+                                {' / '}
+                                <button
+                                  onClick={() => onSetEnabledSubscribers(new Set())}
+                                  className="hover:text-foreground transition-colors"
+                                >
+                                  none
+                                </button>
+                                <SelectionHint />
+                              </div>
                             )}
                             {subscribers.length === 0 && (
                               <div className="text-muted-foreground text-[10px] py-2">No subscribers</div>
@@ -447,12 +587,14 @@ export function MulticastTreesOverlayPanel({
                                 members={members}
 
                                 enabledMembers={enabledSubscribers}
-                                onToggleMember={onToggleSubscriber}
+                                onMemberClick={handleSubscriberClick}
+                                orderedUserPKs={orderedSubscriberUserPKs}
+
+                                hoveredUserPK={hoveredUserPK}
+                                onHoverUserPK={setHoveredUserPK}
 
                                 keySuffix="-sub"
-                                colorDotForMember={() => (
-                                  <div className="w-3 h-3 rounded-full bg-red-500 flex-shrink-0" />
-                                )}
+                                accentColorForMember={() => '#14b8a6'}
                               />
                             ))}
                           </div>
@@ -475,6 +617,9 @@ export function MulticastTreesOverlayPanel({
               isDark={isDark}
               publisherColorMap={publisherColorMap}
               activeTab={activeTab}
+              enabledMembers={activeTab === 'publishers' ? enabledPublishers : enabledSubscribers}
+              hoveredTunnelId={hoveredTunnelId}
+              onHoverUserPK={handleTrafficChartHoverUserPK}
             />
           )}
 
@@ -505,39 +650,6 @@ export function MulticastTreesOverlayPanel({
               </div>
             )}
           </div>
-
-          {/* Legend */}
-          <div className="pt-2 border-t border-[var(--border)]">
-            <div className="text-[10px] text-muted-foreground uppercase tracking-wider mb-1.5">
-              Legend
-            </div>
-            <div className="space-y-1.5 text-[10px]">
-              <div className="flex items-center gap-2">
-                <div className="flex gap-0.5">
-                  {MULTICAST_PUBLISHER_COLORS.slice(0, 4).map((c, i) => (
-                    <div
-                      key={i}
-                      className="w-2 h-2 rounded-full"
-                      style={{ backgroundColor: isDark ? c.dark : c.light }}
-                    />
-                  ))}
-                </div>
-                <span>Publisher (each has unique color)</span>
-              </div>
-              <div className="flex items-center gap-2">
-                <div className="w-3 h-3 rounded-full bg-red-500 flex-shrink-0" />
-                <span>Subscriber (destination)</span>
-              </div>
-              <div className="flex items-center gap-2">
-                <div className="w-6 h-0.5 bg-purple-500 rounded" />
-                <span>Tree path</span>
-              </div>
-              <div className="flex items-center gap-2">
-                <div className="w-3 h-3 rounded-full flex-shrink-0" style={{ backgroundColor: isDark ? '#a855f7' : '#7c3aed' }} />
-                <span>Validator</span>
-              </div>
-            </div>
-          </div>
         </div>
       )}
     </div>
@@ -545,6 +657,23 @@ export function MulticastTreesOverlayPanel({
 }
 
 const TRAFFIC_TIME_RANGES = ['1h', '6h', '12h', '24h'] as const
+const BUCKET_OPTIONS = ['auto', '2s', '10s', '30s', '1m', '2m', '5m', '10m'] as const
+const AUTO_BUCKET_LABEL: Record<string, string> = { '1h': '30s', '6h': '2m', '12h': '5m', '24h': '10m' }
+
+function formatPps(pps: number): string {
+  if (pps === 0) return '—'
+  if (pps >= 1e9) return `${(pps / 1e9).toFixed(1)} Gpps`
+  if (pps >= 1e6) return `${(pps / 1e6).toFixed(1)} Mpps`
+  if (pps >= 1e3) return `${(pps / 1e3).toFixed(1)} Kpps`
+  return `${pps.toFixed(0)} pps`
+}
+
+function formatAxisPps(pps: number): string {
+  if (pps >= 1e9) return `${(pps / 1e9).toFixed(1)}G`
+  if (pps >= 1e6) return `${(pps / 1e6).toFixed(1)}M`
+  if (pps >= 1e3) return `${(pps / 1e3).toFixed(0)}K`
+  return `${pps.toFixed(0)}`
+}
 
 function formatTime(timeStr: string): string {
   const d = new Date(timeStr)
@@ -561,14 +690,14 @@ function formatAxisBps(bps: number): string {
 
 /** Color palette for traffic chart lines — same set used by the main traffic page */
 const TRAFFIC_COLORS = [
-  '#9333ea', // purple
-  '#2563eb', // blue
-  '#16a34a', // green
-  '#ea580c', // orange
-  '#0891b2', // cyan
-  '#ca8a04', // yellow
-  '#db2777', // pink
-  '#5bc0de', // light blue
+  '#7c5cbf', // soft purple
+  '#4a8fe7', // soft blue
+  '#3dad6f', // soft green
+  '#d4854a', // soft orange
+  '#2ba3a8', // soft teal
+  '#c4a23d', // soft gold
+  '#c45fa0', // soft magenta
+  '#6ba8f2', // soft sky
 ]
 
 /** Collapsible traffic chart for a selected multicast group */
@@ -576,32 +705,45 @@ function MulticastTrafficChartSection({
   groupCode,
   members,
   activeTab,
+  enabledMembers,
+  hoveredTunnelId,
+  onHoverUserPK,
 }: {
   groupCode: string
   members: MulticastMember[]
   isDark: boolean
   publisherColorMap: Map<string, number>
   activeTab: 'publishers' | 'subscribers'
+  enabledMembers: Set<string>
+  hoveredTunnelId: number | null
+  onHoverUserPK: (userPK: string | null) => void
 }) {
   const [open, setOpen] = useState(true)
   const [timeRange, setTimeRange] = useState<string>('1h')
+  const [metric, setMetric] = useState<'throughput' | 'packets'>('throughput')
+  const [bucket, setBucket] = useState<string>('auto')
+
+  const bucketSeconds = bucket === 'auto' ? undefined : bucket.endsWith('m')
+    ? String(parseInt(bucket) * 60)
+    : String(parseInt(bucket))
 
   const { data: trafficData, isLoading } = useQuery({
-    queryKey: ['multicast-traffic', groupCode, timeRange],
-    queryFn: () => fetchMulticastGroupTraffic(groupCode, timeRange),
+    queryKey: ['multicast-traffic', groupCode, timeRange, bucket],
+    queryFn: () => fetchMulticastGroupTraffic(groupCode, timeRange, bucketSeconds),
     refetchInterval: 30000,
     enabled: open,
   })
 
-  // Build tunnel info lookup from members: tunnel_id -> { code, mode }
+  // Build tunnel info lookup from members: tunnel_id -> { code, mode, userPk }
   const tunnelInfo = useMemo(() => {
-    const map = new Map<number, { code: string; mode: string }>()
+    const map = new Map<number, { code: string; mode: string; userPk: string }>()
     for (const m of members) {
       if (m.tunnel_id > 0 && !map.has(m.tunnel_id)) {
         const effectiveMode = m.mode === 'P+S' ? 'P' : m.mode
         map.set(m.tunnel_id, {
           code: m.device_code || m.device_pk.slice(0, 8),
           mode: effectiveMode,
+          userPk: m.user_pk,
         })
       }
     }
@@ -630,8 +772,13 @@ function MulticastTrafficChartSection({
         timeMap.set(p.time, row)
       }
       // From user perspective: device out = user inbound, device in = user outbound
-      row[`t${p.tunnel_id}_in`] = p.out_bps
-      row[`t${p.tunnel_id}_out`] = -p.in_bps
+      if (metric === 'throughput') {
+        row[`t${p.tunnel_id}_in`] = p.out_bps
+        row[`t${p.tunnel_id}_out`] = -p.in_bps
+      } else {
+        row[`t${p.tunnel_id}_in`] = p.out_pps
+        row[`t${p.tunnel_id}_out`] = -p.in_pps
+      }
     }
 
     // Fill missing tunnels with 0 so Recharts renders continuous lines
@@ -646,7 +793,7 @@ function MulticastTrafficChartSection({
       String(a.time).localeCompare(String(b.time))
     )
     return { chartData: data, tunnelIds: [...tunnels].sort((a, b) => a - b) }
-  }, [trafficData, activeTab])
+  }, [trafficData, activeTab, metric])
 
   // Assign a unique color per tunnel from the palette
   const getTunnelColor = (tunnelId: number) => {
@@ -656,6 +803,32 @@ function MulticastTrafficChartSection({
 
   // Track hovered chart index for legend table values
   const [hoveredIdx, setHoveredIdx] = useState<number | null>(null)
+  const [localHoveredSeries, setLocalHoveredSeries] = useState<number | null>(null)
+
+  // Merge local legend hover with member list hover (hoveredTunnelId from parent)
+  const effectiveHoveredSeries = localHoveredSeries ?? hoveredTunnelId
+
+  // Derive visible series from enabled members — member list is the source of truth
+  const visibleSeries = useMemo(() => {
+    const visible = new Set<number>()
+    for (const tid of tunnelIds) {
+      const info = tunnelInfo.get(tid)
+      if (info && enabledMembers.has(info.userPk)) {
+        visible.add(tid)
+      }
+    }
+    return visible
+  }, [tunnelIds, tunnelInfo, enabledMembers])
+
+  // Rendered series = visible + hovered preview (if hovered tunnel isn't already visible)
+  const renderedSeries = useMemo(() => {
+    if (hoveredTunnelId !== null && !visibleSeries.has(hoveredTunnelId) && tunnelIds.includes(hoveredTunnelId)) {
+      const set = new Set(visibleSeries)
+      set.add(hoveredTunnelId)
+      return set
+    }
+    return visibleSeries
+  }, [visibleSeries, hoveredTunnelId, tunnelIds])
 
   // Values to display in the legend: hovered point or latest
   const displayValues = useMemo(() => {
@@ -675,32 +848,48 @@ function MulticastTrafficChartSection({
 
   return (
     <div className="border-t border-[var(--border)] pt-2">
-      <button
-        onClick={() => setOpen(o => !o)}
-        className="flex items-center gap-1.5 text-[10px] text-muted-foreground uppercase tracking-wider w-full hover:text-foreground transition-colors"
-      >
-        <BarChart3 className="h-3 w-3" />
-        Traffic ({activeTab})
-        {open ? <ChevronDown className="h-3 w-3 ml-auto" /> : <ChevronRight className="h-3 w-3 ml-auto" />}
-      </button>
+      <div className="flex items-center gap-1.5">
+        <button
+          onClick={() => setOpen(o => !o)}
+          className="flex items-center gap-1.5 text-[10px] text-muted-foreground uppercase tracking-wider hover:text-foreground transition-colors"
+        >
+          <BarChart3 className="h-3 w-3" />
+          Traffic ({activeTab})
+          {open ? <ChevronDown className="h-3 w-3" /> : <ChevronRight className="h-3 w-3" />}
+        </button>
+        {open && (
+          <div className="flex gap-1 ml-auto" onClick={e => e.stopPropagation()}>
+            <select
+              value={metric}
+              onChange={e => setMetric(e.target.value as 'throughput' | 'packets')}
+              className="text-[10px] bg-transparent border border-border rounded px-1 py-0.5 text-foreground cursor-pointer"
+            >
+              <option value="throughput">bps</option>
+              <option value="packets">pps</option>
+            </select>
+            <select
+              value={bucket}
+              onChange={e => setBucket(e.target.value)}
+              className="text-[10px] bg-transparent border border-border rounded px-1 py-0.5 text-foreground cursor-pointer"
+            >
+              {BUCKET_OPTIONS.map(b => (
+                <option key={b} value={b}>{b === 'auto' ? `auto (${AUTO_BUCKET_LABEL[timeRange] || '30s'})` : b}</option>
+              ))}
+            </select>
+            <select
+              value={timeRange}
+              onChange={e => setTimeRange(e.target.value)}
+              className="text-[10px] bg-transparent border border-border rounded px-1 py-0.5 text-foreground cursor-pointer"
+            >
+              {TRAFFIC_TIME_RANGES.map(r => (
+                <option key={r} value={r}>{r}</option>
+              ))}
+            </select>
+          </div>
+        )}
+      </div>
       {open && (
         <div className="mt-2">
-          {/* Time range pills */}
-          <div className="flex gap-1 mb-2">
-            {TRAFFIC_TIME_RANGES.map(r => (
-              <button
-                key={r}
-                onClick={() => setTimeRange(r)}
-                className={`px-1.5 py-0.5 text-[10px] rounded ${
-                  timeRange === r
-                    ? 'bg-purple-500/20 text-purple-500 font-medium'
-                    : 'text-muted-foreground hover:text-foreground hover:bg-[var(--muted)]'
-                }`}
-              >
-                {r}
-              </button>
-            ))}
-          </div>
 
           {isLoading && (
             <div className="text-[10px] text-muted-foreground py-4 text-center">Loading...</div>
@@ -714,8 +903,8 @@ function MulticastTrafficChartSection({
             <div>
               {/* Chart */}
               <div className="relative">
-                <span className="absolute top-0.5 left-[46px] text-[8px] text-muted-foreground/50 pointer-events-none z-10">▲ In</span>
-                <span className="absolute bottom-4 left-[46px] text-[8px] text-muted-foreground/50 pointer-events-none z-10">▼ Out</span>
+                <span className="absolute top-0.5 left-0 text-[8px] text-muted-foreground/50 pointer-events-none z-10">▲ In</span>
+                <span className="absolute bottom-4 left-0 text-[8px] text-muted-foreground/50 pointer-events-none z-10">▼ Out</span>
                 <div className="h-44">
                   <ResponsiveContainer width="100%" height="100%">
                     <LineChart
@@ -739,7 +928,7 @@ function MulticastTrafficChartSection({
                         tick={{ fontSize: 9 }}
                         tickLine={false}
                         axisLine={false}
-                        tickFormatter={(v) => formatAxisBps(Math.abs(v))}
+                        tickFormatter={(v) => metric === 'throughput' ? formatAxisBps(Math.abs(v)) : formatAxisPps(Math.abs(v))}
                         width={45}
                       />
                       <ReferenceLine y={0} stroke="var(--border)" strokeWidth={1} />
@@ -747,64 +936,91 @@ function MulticastTrafficChartSection({
                         content={() => null}
                         cursor={{ stroke: 'var(--border)', strokeWidth: 1 }}
                       />
-                      {tunnelIds.map(tid => (
-                        <Line
-                          key={`${tid}_in`}
-                          type="monotone"
-                          dataKey={`t${tid}_in`}
-                          stroke={getTunnelColor(tid)}
-                          strokeWidth={1.5}
-                          dot={false}
-                          isAnimationActive={false}
-                        />
-                      ))}
-                      {tunnelIds.map(tid => (
-                        <Line
-                          key={`${tid}_out`}
-                          type="monotone"
-                          dataKey={`t${tid}_out`}
-                          stroke={getTunnelColor(tid)}
-                          strokeWidth={1.5}
-                          strokeDasharray="4 2"
-                          dot={false}
-                          isAnimationActive={false}
-                        />
-                      ))}
+                      {tunnelIds.filter(tid => renderedSeries.has(tid)).map(tid => {
+                        const isPreview = !visibleSeries.has(tid)
+                        const baseOpacity = isPreview ? 0.35 : 1
+                        const opacity = effectiveHoveredSeries !== null && effectiveHoveredSeries !== tid ? baseOpacity * 0.2 : baseOpacity
+                        return (
+                          <Line
+                            key={`${tid}_in`}
+                            type="monotone"
+                            dataKey={`t${tid}_in`}
+                            stroke={getTunnelColor(tid)}
+                            strokeWidth={1.5}
+                            strokeOpacity={opacity}
+                            dot={false}
+                            isAnimationActive={false}
+                          />
+                        )
+                      })}
+                      {tunnelIds.filter(tid => renderedSeries.has(tid)).map(tid => {
+                        const isPreview = !visibleSeries.has(tid)
+                        const baseOpacity = isPreview ? 0.35 : 1
+                        const opacity = effectiveHoveredSeries !== null && effectiveHoveredSeries !== tid ? baseOpacity * 0.2 : baseOpacity
+                        return (
+                          <Line
+                            key={`${tid}_out`}
+                            type="monotone"
+                            dataKey={`t${tid}_out`}
+                            stroke={getTunnelColor(tid)}
+                            strokeWidth={1.5}
+                            strokeOpacity={opacity}
+                            strokeDasharray="4 2"
+                            dot={false}
+                            isAnimationActive={false}
+                          />
+                        )
+                      })}
                     </LineChart>
                   </ResponsiveContainer>
                 </div>
               </div>
 
               {/* Legend table */}
-              <div className="mt-2">
-                <div className="grid grid-cols-[auto_1fr_auto_auto] gap-x-2 gap-y-0.5 text-[10px]">
-                  {/* Header */}
-                  <div />
-                  <div className="text-muted-foreground/60 font-medium">Device</div>
-                  <div className="text-muted-foreground/60 font-medium text-right">↓ In</div>
-                  <div className="text-muted-foreground/60 font-medium text-right">↑ Out</div>
-                  {/* Rows */}
-                  {tunnelIds.map(tid => {
-                    const info = tunnelInfo.get(tid)
-                    const vals = displayValues.get(tid)
-                    return (
-                      <div key={tid} className="contents">
-                        <div className="flex items-center">
-                          <div className="w-2 h-2 rounded-sm" style={{ backgroundColor: getTunnelColor(tid) }} />
-                        </div>
-                        <div className="text-foreground truncate font-mono">
-                          {info?.code ?? `t${tid}`} <span className="text-muted-foreground">t{tid}</span>
-                        </div>
-                        <div className="text-right font-mono tabular-nums text-foreground">
-                          {vals ? formatBandwidth(vals.inBps) : '—'}
-                        </div>
-                        <div className="text-right font-mono tabular-nums text-muted-foreground">
-                          {vals ? formatBandwidth(vals.outBps) : '—'}
-                        </div>
-                      </div>
-                    )
-                  })}
+              <div className="mt-2 text-[10px]">
+                <div className="flex items-center gap-2 px-1 py-0.5 text-muted-foreground/60 font-medium">
+                  <div className="w-2" />
+                  <div className="flex-1 min-w-0">Device</div>
+                  <div className="text-right">↓ In</div>
+                  <div className="text-right">↑ Out</div>
                 </div>
+                {tunnelIds.map((tid) => {
+                  const info = tunnelInfo.get(tid)
+                  const vals = displayValues.get(tid)
+                  const isVisible = visibleSeries.has(tid)
+                  const isHighlighted = hoveredTunnelId === tid
+                  return (
+                    <div
+                      key={tid}
+                      className={`flex items-center gap-2 px-1 py-0.5 rounded select-none transition-colors ${
+                        isHighlighted ? 'bg-muted/80' : 'hover:bg-muted/60'
+                      } ${!isVisible ? 'opacity-55' : ''}`}
+                      onMouseEnter={() => {
+                        if (isVisible) {
+                          setLocalHoveredSeries(tid)
+                          // Coordinate back to member list
+                          if (info?.userPk) onHoverUserPK(info.userPk)
+                        }
+                      }}
+                      onMouseLeave={() => {
+                        setLocalHoveredSeries(null)
+                        onHoverUserPK(null)
+                      }}
+                    >
+                      <div className="w-2 h-2 rounded-sm flex-shrink-0" style={{ backgroundColor: !isVisible ? 'var(--muted-foreground)' : getTunnelColor(tid) }} />
+                      <div className="flex-1 min-w-0 text-foreground truncate font-mono">
+                        {info?.code ?? `t${tid}`} <span className="text-muted-foreground">t{tid}</span>
+                        {info?.userPk && <span className="text-muted-foreground"> · {shortenPubkey(info.userPk, 4)}</span>}
+                      </div>
+                      <div className="text-right font-mono tabular-nums text-foreground">
+                        {vals && isVisible ? (metric === 'throughput' ? formatBandwidth(vals.inBps) : formatPps(vals.inBps)) : '—'}
+                      </div>
+                      <div className="text-right font-mono tabular-nums text-muted-foreground">
+                        {vals && isVisible ? (metric === 'throughput' ? formatBandwidth(vals.outBps) : formatPps(vals.outBps)) : '—'}
+                      </div>
+                    </div>
+                  )
+                })}
               </div>
             </div>
           )}
@@ -819,16 +1035,22 @@ function MetroGroup({
   metro,
   members,
   enabledMembers,
-  onToggleMember,
+  onMemberClick,
+  orderedUserPKs,
+  hoveredUserPK,
+  onHoverUserPK,
   keySuffix,
-  colorDotForMember,
+  accentColorForMember,
 }: {
   metro: string
   members: MulticastMember[]
   enabledMembers: Set<string>
-  onToggleMember: (devicePK: string) => void
+  onMemberClick: (userPK: string, index: number, event: React.MouseEvent) => void
+  orderedUserPKs: string[]
+  hoveredUserPK: string | null
+  onHoverUserPK: (userPK: string | null) => void
   keySuffix: string
-  colorDotForMember: (m: MulticastMember) => React.ReactNode
+  accentColorForMember: (m: MulticastMember) => string
 }) {
   const [open, setOpen] = useState(true)
 
@@ -840,19 +1062,25 @@ function MetroGroup({
       >
         {open ? <ChevronDown className="h-3 w-3" /> : <ChevronRight className="h-3 w-3" />}
         <span className="px-1 py-0 rounded bg-[var(--muted)] text-[9px] font-medium">{metro}</span>
-        <span className="ml-auto">{members.length}</span>
+        <span className="ml-auto text-muted-foreground/50">{members.length}</span>
       </button>
       {open && (
         <div className="space-y-1 mt-1 ml-1">
-          {members.map(m => (
-            <MemberRow
-              key={m.user_pk + keySuffix}
-              member={m}
-              isEnabled={enabledMembers.has(m.device_pk)}
-              onToggle={() => onToggleMember(m.device_pk)}
-              colorDot={colorDotForMember(m)}
-            />
-          ))}
+          {members.map(m => {
+            const orderedIndex = orderedUserPKs.indexOf(m.user_pk)
+            return (
+              <MemberRow
+                key={m.user_pk + keySuffix}
+                member={m}
+                isEnabled={enabledMembers.has(m.user_pk)}
+                isHovered={hoveredUserPK === m.user_pk}
+                onClick={(e) => onMemberClick(m.user_pk, orderedIndex, e)}
+                onMouseEnter={() => onHoverUserPK(m.user_pk)}
+                onMouseLeave={() => onHoverUserPK(null)}
+                accentColor={accentColorForMember(m)}
+              />
+            )
+          })}
         </div>
       )}
     </div>
