@@ -29,6 +29,7 @@ import {
   Zap,
   Sun,
   Moon,
+  Coins,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { useTheme } from '@/hooks/use-theme'
@@ -54,6 +55,7 @@ export function Sidebar() {
   const isQuerySessions = location.pathname === '/query/sessions'
   const isTopologyRoute = location.pathname === '/topology' || location.pathname.startsWith('/topology/')
   const isPerformanceRoute = location.pathname.startsWith('/performance')
+  const isRewardsRoute = location.pathname === '/topology/rewards'
   const isTrafficRoute = location.pathname.startsWith('/traffic')
   const isDZRoute = location.pathname.startsWith('/dz/')
   const isSolanaRoute = location.pathname.startsWith('/solana/')
@@ -66,7 +68,7 @@ export function Sidebar() {
   const isTopologyRedundancy = location.pathname === '/topology/redundancy'
   const isTopologyMetroConnectivity = location.pathname === '/topology/metro-connectivity'
   const isTopologyMaintenance = location.pathname === '/topology/maintenance'
-  const isTopologyTool = isTopologyPathCalculator || isTopologyRedundancy || isTopologyMetroConnectivity || isTopologyMaintenance
+  const isTopologyTool = isTopologyPathCalculator || isTopologyRedundancy || isTopologyMetroConnectivity || isTopologyMaintenance || isRewardsRoute
 
   // Performance sub-routes
   const isPerformanceDzVsInternet = location.pathname === '/performance/dz-vs-internet'
@@ -247,6 +249,9 @@ export function Sidebar() {
               <Landmark className="h-4 w-4" />
             </Link>
           )}
+          <Link to="/topology/rewards" className={collapsedIconClass(isRewardsRoute)} title="Rewards">
+            <Coins className="h-4 w-4" />
+          </Link>
         </div>
 
         {/* Footer */}
@@ -389,6 +394,10 @@ export function Sidebar() {
                         <Link to="/topology/maintenance" className={subNavItemClass(isTopologyMaintenance, true)}>
                           <Wrench className="h-4 w-4" />
                           Maintenance
+                        </Link>
+                        <Link to="/topology/rewards" className={subNavItemClass(isRewardsRoute, true)}>
+                          <Coins className="h-4 w-4" />
+                          Rewards
                         </Link>
                       </>
                     )}

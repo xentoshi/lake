@@ -56,6 +56,7 @@ import { MulticastGroupDetailPage } from '@/components/multicast-group-detail-pa
 import { ValidatorDetailPage } from '@/components/validator-detail-page'
 import { GossipNodeDetailPage } from '@/components/gossip-node-detail-page'
 import { StakePage } from '@/components/stake-page'
+import { RewardsPage } from '@/components/rewards-page'
 import { SettingsPage } from '@/components/settings-page'
 import { ChangelogPage } from '@/components/changelog-page'
 import { TermsPage } from '@/components/terms-page'
@@ -659,6 +660,10 @@ function AppContent() {
 
             {/* Stake analytics route */}
             <Route path="/stake" element={<StakePage />} />
+
+            {/* Rewards simulation (under topology tools) */}
+            <Route path="/topology/rewards" element={<RewardsPage />} />
+            <Route path="/rewards" element={<Navigate to="/topology/rewards" replace />} />
 
             {/* Settings */}
             <Route path="/settings" element={<SettingsPage />} />
