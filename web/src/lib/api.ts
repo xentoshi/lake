@@ -4339,6 +4339,8 @@ export interface OperatorValue {
 export interface RewardsSimulateResponse {
   results: OperatorValue[]
   total_value: number
+  computed_at?: string
+  epoch?: number
 }
 
 export interface OperatorDelta {
@@ -4389,20 +4391,11 @@ export async function fetchRewardsLiveNetwork(): Promise<RewardsLiveNetworkRespo
   return res.json()
 }
 
-export async function fetchRewardsSimulate(params?: {
-  operator_uptime?: number
-  contiguity_bonus?: number
-  demand_multiplier?: number
-  full?: boolean
-  signal?: AbortSignal
-}): Promise<RewardsSimulateResponse> {
-  const searchParams = new URLSearchParams()
-  if (params?.operator_uptime !== undefined) searchParams.set('operator_uptime', String(params.operator_uptime))
-  if (params?.contiguity_bonus !== undefined) searchParams.set('contiguity_bonus', String(params.contiguity_bonus))
-  if (params?.demand_multiplier !== undefined) searchParams.set('demand_multiplier', String(params.demand_multiplier))
-  if (params?.full) searchParams.set('full', 'true')
-  const qs = searchParams.toString()
-  const res = await fetchWithRetry(`/api/rewards/simulate${qs ? '?' + qs : ''}`, { signal: params?.signal })
+export async function fetchRewardsSimulate(): Promise<RewardsSimulateResponse> {
+  const res = await fetchWithRetry('/api/rewards/simulate')
+  if (res.status === 503) {
+    throw new Error('computing')
+  }
   if (!res.ok) {
     const text = await res.text()
     throw new Error(text || 'Simulation failed')
